@@ -312,7 +312,7 @@ function M.setup_keymaps(tabpage)
   -- Set keymaps on current buffer
   set_buffer_keymaps(vim.api.nvim_get_current_buf())
 
-  -- Set up autocmd to apply keymaps when entering any buffer in this tabpage
+  -- Set up autocmd to apply keymaps only on codediff diff buffers
   vim.api.nvim_create_autocmd("BufEnter", {
     group = augroup,
     callback = function()
@@ -321,7 +321,11 @@ function M.setup_keymaps(tabpage)
       local win_config = vim.api.nvim_win_get_config(0)
       if win_config.relative ~= "" then return end
       if not lifecycle.get_session(tabpage) then return end
-      set_buffer_keymaps(vim.api.nvim_get_current_buf())
+      -- Only apply review keymaps to codediff diff buffers, not the explorer
+      local bufnr = vim.api.nvim_get_current_buf()
+      local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
+      if bufnr ~= orig_buf and bufnr ~= mod_buf then return end
+      set_buffer_keymaps(bufnr)
     end,
   })
 end
