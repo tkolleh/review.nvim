@@ -290,8 +290,8 @@ function M.on_file_changed(tabpage)
 
   -- Set syntax highlighting for the new file's buffers
   local raw_orig_path, raw_mod_path = lifecycle.get_paths(tabpage)
-  set_buffer_filetype(orig_buf, raw_orig_path)
-  set_buffer_filetype(mod_buf, raw_mod_path)
+  set_buffer_filetype(orig_buf, to_path_string(raw_orig_path))
+  set_buffer_filetype(mod_buf, to_path_string(raw_mod_path))
 
   -- Make buffers readonly if configured
   local cfg = config.get()

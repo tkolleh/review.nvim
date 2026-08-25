@@ -10,7 +10,6 @@
 review-commands	review.txt	/*review-commands*
 review-config	review.txt	/*review-config*
 review-config-codediff	review.txt	/*review-config-codediff*
-review-config-export	review.txt	/*review-config-export*
 review-contents	review.txt	/*review-contents*
 review-export	review.txt	/*review-export*
 review-highlights	review.txt	/*review-highlights*
