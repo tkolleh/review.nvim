@@ -1,6 +1,7 @@
 local store = require("review.store")
 local marks = require("review.marks")
 local config = require("review.config")
+local helpers = require("tests.helpers")
 
 describe("comment alignment between panes", function()
   local orig_buf, mod_buf
@@ -42,7 +43,7 @@ describe("comment alignment between panes", function()
 
   describe("align_buffers", function()
     it("adds padding on old side when comment exists only on new side", function()
-      store.add("test.lua", 3, "issue", "Fix this", nil, "new")
+      helpers.add(store, "test.lua", 3, "issue", "Fix this", nil, "new")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -58,7 +59,7 @@ describe("comment alignment between panes", function()
     end)
 
     it("adds padding on new side when comment exists only on old side", function()
-      store.add("test.lua", 3, "note", "Old note", nil, "old")
+      helpers.add(store, "test.lua", 3, "note", "Old note", nil, "old")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -81,8 +82,8 @@ describe("comment alignment between panes", function()
     end)
 
     it("adds no padding when both sides have same-height comments at same line", function()
-      store.add("test.lua", 3, "issue", "Old comment", nil, "old")
-      store.add("test.lua", 3, "note", "New comment", nil, "new")
+      helpers.add(store, "test.lua", 3, "issue", "Old comment", nil, "old")
+      helpers.add(store, "test.lua", 3, "note", "New comment", nil, "new")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -96,9 +97,9 @@ describe("comment alignment between panes", function()
 
     it("pads the shorter side when comments have different heights", function()
       -- Multi-line comment on new side (3 text lines = 5 box lines)
-      store.add("test.lua", 3, "issue", "Line one\nLine two\nLine three", nil, "new")
+      helpers.add(store, "test.lua", 3, "issue", "Line one\nLine two\nLine three", nil, "new")
       -- Single-line comment on old side (1 text line = 3 box lines)
-      store.add("test.lua", 3, "note", "Short", nil, "old")
+      helpers.add(store, "test.lua", 3, "note", "Short", nil, "old")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -115,8 +116,8 @@ describe("comment alignment between panes", function()
     end)
 
     it("handles comments on different lines independently", function()
-      store.add("test.lua", 3, "issue", "On new at 3", nil, "new")
-      store.add("test.lua", 7, "note", "On old at 7", nil, "old")
+      helpers.add(store, "test.lua", 3, "issue", "On new at 3", nil, "new")
+      helpers.add(store, "test.lua", 7, "note", "On old at 7", nil, "old")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -132,7 +133,7 @@ describe("comment alignment between panes", function()
     end)
 
     it("clears old padding before recalculating", function()
-      store.add("test.lua", 3, "issue", "Comment", nil, "new")
+      helpers.add(store, "test.lua", 3, "issue", "Comment", nil, "new")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -152,7 +153,7 @@ describe("comment alignment between panes", function()
     end)
 
     it("does not add padding for file comments (they render on both sides)", function()
-      store.add("test.lua", 0, "note", "File-level note")
+      helpers.add(store, "test.lua", 0, "note", "File-level note")
 
       marks.render_for_buffer(orig_buf, "old", "test.lua")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
@@ -170,7 +171,7 @@ describe("comment alignment between panes", function()
       local win = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(win, mod_buf)
 
-      store.add("test.lua", 0, "note", "File note")
+      helpers.add(store, "test.lua", 0, "note", "File note")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
 
       local view = vim.api.nvim_win_call(win, function()
@@ -187,7 +188,7 @@ describe("comment alignment between panes", function()
       vim.api.nvim_win_set_cursor(win, { 5, 0 })
       vim.cmd("normal! zt")
 
-      store.add("test.lua", 0, "note", "File note")
+      helpers.add(store, "test.lua", 0, "note", "File note")
       marks.render_for_buffer(mod_buf, "new", "test.lua")
 
       local view = vim.api.nvim_win_call(win, function()

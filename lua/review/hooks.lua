@@ -2,6 +2,7 @@ local M = {}
 
 local marks = require("review.marks")
 local config = require("review.config")
+local store = require("review.store")
 local normalize_path = require("review.utils").normalize_path
 
 ---@type number|nil Current tabpage with active codediff session
@@ -9,6 +10,35 @@ local current_tabpage = nil
 
 ---@type number|nil Autocmd group for buffer events
 local buf_augroup = nil
+
+---@type uv.uv_timer_t|nil Background poll picking up external writers'
+---(e.g. an agent's) concurrent comments while a review session is open
+local sync_timer = nil
+
+local SYNC_POLL_INTERVAL_MS = 3000
+
+local function start_sync_timer()
+  if sync_timer then
+    return
+  end
+  sync_timer = vim.uv.new_timer()
+  sync_timer:start(SYNC_POLL_INTERVAL_MS, SYNC_POLL_INTERVAL_MS, function()
+    store.sync_from_storage(function(ok)
+      if ok then
+        vim.schedule(marks.refresh)
+      end
+    end)
+  end)
+end
+
+local function stop_sync_timer()
+  if not sync_timer then
+    return
+  end
+  sync_timer:stop()
+  sync_timer:close()
+  sync_timer = nil
+end
 
 ---Set syntax highlighting for a buffer based on file path.
 ---Uses treesitter directly instead of setting filetype to avoid triggering
@@ -190,6 +220,7 @@ end
 -- Called when codediff session is created
 function M.on_session_created(tabpage)
   current_tabpage = tabpage
+  start_sync_timer()
 
   local lifecycle = get_lifecycle()
   if not lifecycle then
@@ -269,6 +300,7 @@ end
 -- Called when codediff session is closed
 function M.on_session_closed()
   current_tabpage = nil
+  stop_sync_timer()
   -- Clean up autocmds
   if buf_augroup then
     pcall(vim.api.nvim_del_augroup_by_id, buf_augroup)

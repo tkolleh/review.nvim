@@ -1,4 +1,5 @@
 local store = require("review.store")
+local helpers = require("tests.helpers")
 local marks = require("review.marks")
 local config = require("review.config")
 
@@ -36,7 +37,7 @@ describe("path relativization for comment rendering", function()
 
     it("finds comments when stored with git-root-relative path but buffer uses CWD-relative path", function()
       -- Comment stored with full git-root-relative path (as get_cursor_position does)
-      store.add("backend/ngen/.github/workflows/ci.yml", 3, "issue", "Fix this workflow")
+      helpers.add(store, "backend/ngen/.github/workflows/ci.yml", 3, "issue", "Fix this workflow")
 
       -- Rendering uses git-root-relative path via file_override (after relativization fix)
       marks.render_for_buffer(bufnr, "new", "backend/ngen/.github/workflows/ci.yml")
@@ -49,7 +50,7 @@ describe("path relativization for comment rendering", function()
 
     it("does NOT find comments when file_override uses wrong relative base", function()
       -- Comment stored with git-root-relative path
-      store.add("backend/ngen/.github/workflows/ci.yml", 3, "issue", "Fix this workflow")
+      helpers.add(store, "backend/ngen/.github/workflows/ci.yml", 3, "issue", "Fix this workflow")
 
       -- If we pass CWD-relative path (the bug), it won't match
       marks.render_for_buffer(bufnr, "new", ".github/workflows/ci.yml")
@@ -61,8 +62,8 @@ describe("path relativization for comment rendering", function()
     end)
 
     it("renders on both sides with git-root-relative paths", function()
-      store.add("backend/ngen/src/app.lua", 3, "note", "Old side note", nil, "old")
-      store.add("backend/ngen/src/app.lua", 3, "suggestion", "New side suggestion", nil, "new")
+      helpers.add(store, "backend/ngen/src/app.lua", 3, "note", "Old side note", nil, "old")
+      helpers.add(store, "backend/ngen/src/app.lua", 3, "suggestion", "New side suggestion", nil, "new")
 
       local orig_buf = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(orig_buf, 0, -1, false, {
@@ -86,7 +87,7 @@ describe("path relativization for comment rendering", function()
   describe("path consistency between store and render", function()
     it("comment stored and rendered with same normalized path are found", function()
       local path = "src/components/Button.tsx"
-      store.add(path, 3, "issue", "Needs accessibility attrs")
+      helpers.add(store, path, 3, "issue", "Needs accessibility attrs")
       marks.render_for_buffer(bufnr, "new", path)
 
       local ns_id = vim.api.nvim_create_namespace("review")
@@ -97,7 +98,7 @@ describe("path relativization for comment rendering", function()
 
     it("comment stored with leading ./ is found when rendered without", function()
       -- normalize_path strips leading ./ so both should match
-      store.add("src/app.lua", 3, "issue", "Fix")
+      helpers.add(store, "src/app.lua", 3, "issue", "Fix")
       marks.render_for_buffer(bufnr, nil, "./src/app.lua")
 
       local ns_id = vim.api.nvim_create_namespace("review")
@@ -108,9 +109,9 @@ describe("path relativization for comment rendering", function()
 
     it("multiple comments on same git-root-relative file all render", function()
       local path = "backend/ngen/lib/utils.ex"
-      store.add(path, 1, "note", "First")
-      store.add(path, 3, "issue", "Second")
-      store.add(path, 5, "suggestion", "Third")
+      helpers.add(store, path, 1, "note", "First")
+      helpers.add(store, path, 3, "issue", "Second")
+      helpers.add(store, path, 5, "suggestion", "Third")
 
       marks.render_for_buffer(bufnr, nil, path)
 

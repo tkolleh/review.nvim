@@ -9,6 +9,12 @@ local function notify(msg, level)
   vim.notify(msg, level, { title = "review.nvim" })
 end
 
+---@return string
+local function current_user()
+  local user = vim.fn.expand("$USER")
+  return (user ~= "" and user ~= "$USER") and user or "user"
+end
+
 ---@param initial_type? "note"|"suggestion"|"issue"|"praise"
 function M.add_at_cursor(initial_type)
   local file, line, side = hooks.get_cursor_position()
@@ -17,19 +23,16 @@ function M.add_at_cursor(initial_type)
     return
   end
 
-  local existing = store.get_at_line(file, line, side)
-  if existing then
-    notify("Comment already exists at this line. Use edit instead.", vim.log.levels.WARN)
-    return
-  end
-
   popup.open(initial_type or "note", nil, function(comment_type, text)
     if comment_type and text then
-      store.add(file, line, comment_type, text, nil, side)
-      vim.schedule(function()
+      store.add(file, line, comment_type, text, nil, side, current_user(), function(_, err)
+        if err then
+          notify(string.format("Failed to add comment: %s", err), vim.log.levels.ERROR)
+          return
+        end
         marks.refresh()
+        notify(string.format("Added %s comment", comment_type), vim.log.levels.INFO)
       end)
-      notify(string.format("Added %s comment", comment_type), vim.log.levels.INFO)
     end
   end)
 end
@@ -51,21 +54,27 @@ function M.file_comment(initial_type)
   if existing then
     popup.open(existing.type, existing.text, function(new_type, text)
       if new_type and text then
-        store.update(existing.id, text, new_type)
-        vim.schedule(function()
+        store.update(existing.id, existing.text, text, new_type, function(ok, err)
+          if not ok then
+            notify(string.format("Failed to update file comment: %s", err or "not found"), vim.log.levels.ERROR)
+            return
+          end
           marks.refresh()
+          notify("File comment updated", vim.log.levels.INFO)
         end)
-        notify("File comment updated", vim.log.levels.INFO)
       end
     end)
   else
     popup.open(initial_type or "note", nil, function(comment_type, text)
       if comment_type and text then
-        store.add(file, 0, comment_type, text)
-        vim.schedule(function()
+        store.add(file, 0, comment_type, text, nil, nil, current_user(), function(_, err)
+          if err then
+            notify(string.format("Failed to add file comment: %s", err), vim.log.levels.ERROR)
+            return
+          end
           marks.refresh()
+          notify(string.format("Added %s file comment", comment_type), vim.log.levels.INFO)
         end)
-        notify(string.format("Added %s file comment", comment_type), vim.log.levels.INFO)
       end
     end)
   end
@@ -79,78 +88,114 @@ function M.add_for_range(initial_type)
     return
   end
 
-  local existing = store.get_overlapping(file, start_line, end_line, side)
-  if existing then
-    notify("Comment already exists in this range. Use edit instead.", vim.log.levels.WARN)
+  popup.open(initial_type or "note", nil, function(comment_type, text)
+    if comment_type and text then
+      store.add(file, start_line, comment_type, text, end_line, side, current_user(), function(_, err)
+        if err then
+          notify(string.format("Failed to add comment: %s", err), vim.log.levels.ERROR)
+          return
+        end
+        marks.refresh()
+        notify(string.format("Added %s comment", comment_type), vim.log.levels.INFO)
+      end)
+    end
+  end)
+end
+
+---Resolves the comment at the cursor that `current_user()` may act on,
+---prompting with a picker when more than one comment exists at that
+---file/line and the author owns none or more than one of them
+---(specs/review-storage.allium SelectingAmbiguousComment).
+---@param file string
+---@param line number
+---@param callback fun(comment: Comment)
+local function resolve_target_comment(file, line, callback)
+  if line == 1 then
+    local file_comment = store.get_file_comment(file)
+    if file_comment then
+      callback(file_comment)
+      return
+    end
+  end
+
+  local selected, needs_explicit = store.select_ambiguous_comment(file, line, current_user())
+  if selected then
+    callback(selected)
     return
   end
 
-  popup.open(initial_type or "note", nil, function(comment_type, text)
-    if comment_type and text then
-      store.add(file, start_line, comment_type, text, end_line, side)
-      vim.schedule(function()
-        marks.refresh()
-      end)
-      notify(string.format("Added %s comment", comment_type), vim.log.levels.INFO)
+  if not needs_explicit then
+    notify("No comment at cursor position", vim.log.levels.WARN)
+    return
+  end
+
+  local candidates = store.get_all_at_line(file, line)
+
+  vim.ui.select(candidates, {
+    prompt = "Multiple comments here. Choose one:",
+    format_item = function(comment)
+      return string.format("[%s] %s: %s", comment.type, comment.author, comment.text)
+    end,
+  }, function(choice)
+    if choice then
+      callback(choice)
     end
   end)
 end
 
 function M.edit_at_cursor()
-  local file, line, side = hooks.get_cursor_position()
+  local file, line = hooks.get_cursor_position()
   if not file or not line then
     notify("Could not determine cursor position", vim.log.levels.WARN)
     return
   end
 
-  local comment = store.get_at_line(file, line, side)
-  if not comment and line == 1 then
-    comment = store.get_file_comment(file)
-  end
-  if not comment then
-    notify("No comment at cursor position", vim.log.levels.WARN)
-    return
-  end
-
-  popup.open(comment.type, comment.text, function(new_type, text)
-    if new_type and text then
-      store.update(comment.id, text, new_type)
-      -- Schedule refresh to run after popup is fully closed
-      vim.schedule(function()
-        marks.refresh()
-      end)
-      notify("Comment updated", vim.log.levels.INFO)
-    end
+  resolve_target_comment(file, line, function(comment)
+    popup.open(comment.type, comment.text, function(new_type, text)
+      if new_type and text then
+        store.update(comment.id, comment.text, text, new_type, function(ok, err)
+          if not ok then
+            notify(
+              err == "stale" and "Comment was changed by someone else; edit cancelled"
+                or string.format("Failed to update comment: %s", err or "not found"),
+              vim.log.levels.ERROR
+            )
+            return
+          end
+          marks.refresh()
+          notify("Comment updated", vim.log.levels.INFO)
+        end)
+      end
+    end)
   end)
 end
 
 function M.delete_at_cursor()
-  local file, line, side = hooks.get_cursor_position()
+  local file, line = hooks.get_cursor_position()
   if not file or not line then
     notify("Could not determine cursor position", vim.log.levels.WARN)
     return
   end
 
-  local comment = store.get_at_line(file, line, side)
-  if not comment and line == 1 then
-    comment = store.get_file_comment(file)
-  end
-  if not comment then
-    notify("No comment at cursor position", vim.log.levels.WARN)
-    return
-  end
-
-  vim.ui.select({ "Yes", "No" }, {
-    prompt = "Delete this comment?",
-  }, function(choice)
-    if choice == "Yes" then
-      store.delete(comment.id)
-      -- Schedule refresh to run after UI is closed
-      vim.schedule(function()
-        marks.refresh()
-      end)
-      notify("Comment deleted", vim.log.levels.INFO)
-    end
+  resolve_target_comment(file, line, function(comment)
+    vim.ui.select({ "Yes", "No" }, {
+      prompt = "Delete this comment?",
+    }, function(choice)
+      if choice == "Yes" then
+        store.delete(comment.id, comment.text, function(ok, err)
+          if not ok then
+            notify(
+              err == "stale" and "Comment was changed by someone else; delete cancelled"
+                or string.format("Failed to delete comment: %s", err or "not found"),
+              vim.log.levels.ERROR
+            )
+            return
+          end
+          marks.refresh()
+          notify("Comment deleted", vim.log.levels.INFO)
+        end)
+      end
+    end)
   end)
 end
 

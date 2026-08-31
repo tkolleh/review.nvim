@@ -1,4 +1,5 @@
 local store = require("review.store")
+local helpers = require("tests.helpers")
 local marks = require("review.marks")
 local config = require("review.config")
 
@@ -33,8 +34,8 @@ describe("layout toggle comment persistence", function()
       local ns_id = vim.api.nvim_create_namespace("review")
 
       -- Add comments to the store (simulates comments added before layout toggle)
-      store.add("test.lua", 3, "issue", "Fix this")
-      store.add("test.lua", 5, "note", "Nice work")
+      helpers.add(store, "test.lua", 3, "issue", "Fix this")
+      helpers.add(store, "test.lua", 5, "note", "Nice work")
 
       -- Render on original buffer
       marks.render_for_buffer(bufnr, "new", "test.lua")
@@ -70,7 +71,7 @@ describe("layout toggle comment persistence", function()
     it("re-renders file comments on a new buffer", function()
       local ns_id = vim.api.nvim_create_namespace("review")
 
-      store.add("test.lua", 0, "note", "File-level comment")
+      helpers.add(store, "test.lua", 0, "note", "File-level comment")
       marks.render_for_buffer(bufnr, "new", "test.lua")
 
       local extmarks_before = vim.api.nvim_buf_get_extmarks(bufnr, ns_id, 0, -1, {})
@@ -95,7 +96,7 @@ describe("layout toggle comment persistence", function()
     it("re-renders alignment padding on new buffers", function()
       local ns_padding = vim.api.nvim_create_namespace("review_padding")
 
-      store.add("test.lua", 3, "issue", "Only on new side", nil, "new")
+      helpers.add(store, "test.lua", 3, "issue", "Only on new side", nil, "new")
 
       local orig_buf = vim.api.nvim_create_buf(false, true)
       vim.api.nvim_buf_set_lines(orig_buf, 0, -1, false, {

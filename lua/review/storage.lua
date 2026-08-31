@@ -1,6 +1,15 @@
 local M = {}
 
-local data_dir = vim.fn.stdpath("data") .. "/review"
+local duckdb = require("review.duckdb")
+
+-- REVIEW_NVIM_TEST_DATA_DIR lets the test suite isolate each spec-file
+-- subprocess's storage from the real XDG path (PlenaryBustedDirectory runs
+-- spec files as separate concurrent `nvim --headless` processes, per
+-- plenary's test_harness.lua; without this, they all race on the same
+-- real ~/.local/share/nvim/review/<hash>-<branch>.duckdb file, which under
+-- DuckDB's single-writer-excludes-everyone locking model would hard-fail
+-- with a "Conflicting lock" IO Error rather than silently interleaving).
+local data_dir = os.getenv("REVIEW_NVIM_TEST_DATA_DIR") or (vim.fn.stdpath("data") .. "/review")
 
 ---@type {rev1: string, rev2: string}|nil
 local current_revisions = nil
@@ -55,6 +64,47 @@ local function short_rev(rev)
   return rev:gsub("%^$", ""):sub(1, 8)
 end
 
+---@return table
+function M.current_session()
+  local now = os.time()
+  local session = {
+    project_root = get_git_root(),
+    created_at = now,
+    updated_at = now,
+  }
+
+  if current_revisions then
+    session.scope = "revision_range"
+    session.rev1 = short_rev(current_revisions.rev1)
+    session.rev2 = short_rev(current_revisions.rev2)
+  else
+    session.scope = "branch"
+    session.branch_name = get_git_branch()
+  end
+
+  return session
+end
+
+---@param _session table
+---@param scope "review"|"file"|"line"
+---@return table
+function M.session_comments(_session, scope)
+  if scope == "review" then
+    return {}
+  end
+
+  local store = require("review.store")
+  local all = store.get_all()
+  local filtered = {}
+  for _, comment in ipairs(all) do
+    local is_file_scope = comment.line == 0
+    if (scope == "file" and is_file_scope) or (scope == "line" and not is_file_scope) then
+      table.insert(filtered, comment)
+    end
+  end
+  return filtered
+end
+
 ---@return string|nil
 function M.get_storage_path()
   local git_root = get_git_root()
@@ -70,7 +120,7 @@ function M.get_storage_path()
   if current_revisions then
     local r1 = short_rev(current_revisions.rev1)
     local r2 = short_rev(current_revisions.rev2)
-    return string.format("%s/%s-%s_%s.json", data_dir, project_hash, r1, r2)
+    return string.format("%s/%s-%s_%s.duckdb", data_dir, project_hash, r1, r2)
   end
 
   local branch = get_git_branch()
@@ -79,25 +129,85 @@ function M.get_storage_path()
   end
 
   local safe_branch = branch:gsub("[^%w%-_]", "_")
-  return string.format("%s/%s-%s.json", data_dir, project_hash, safe_branch)
+  return string.format("%s/%s-%s.duckdb", data_dir, project_hash, safe_branch)
 end
 
----@param comments table
-function M.save(comments)
-  local path = M.get_storage_path()
-  if not path then
+-- Schema DDL, mirroring docs/research/duckdb-storage-backend.md SS2. Batched
+-- into a single -c invocation so schema bootstrap is one short-lived
+-- open-write-close subprocess call, not three.
+local SCHEMA_SQL = [[
+CREATE TABLE IF NOT EXISTS review_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_root    VARCHAR NOT NULL,
+    branch_name     VARCHAR,
+    rev1            VARCHAR,
+    rev2            VARCHAR,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS review_comments (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    comment_scope   VARCHAR NOT NULL CHECK (comment_scope IN ('review', 'file', 'line')),
+    file_path       VARCHAR,
+    line_start      INTEGER,
+    line_end        INTEGER,
+    side            VARCHAR CHECK (side IN ('old', 'new')),
+    comment_type    VARCHAR NOT NULL CHECK (comment_type IN ('note', 'suggestion', 'issue', 'praise')),
+    content         VARCHAR NOT NULL,
+    author          VARCHAR NOT NULL DEFAULT 'user',
+    lifecycle_state VARCHAR NOT NULL DEFAULT 'submitted',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_comments_file ON review_comments(file_path);
+]]
+
+---@type table<string, boolean>
+local schema_ready = {}
+
+---Ensures review_sessions/review_comments exist in db_path, running the DDL
+---at most once per db_path per Neovim process. Every store.lua write funnels
+---through this before its own statement.
+---@param db_path string
+---@param callback fun(ok: boolean, err: string|nil)
+function M.ensure_schema(db_path, callback)
+  if schema_ready[db_path] then
+    callback(true, nil)
     return
   end
 
-  local data = vim.fn.json_encode(comments)
-  local file = io.open(path, "w")
-  if file then
-    file:write(data)
-    file:close()
-  end
+  duckdb.query(db_path, SCHEMA_SQL, nil, function(ok, _, err)
+    if ok then
+      schema_ready[db_path] = true
+    end
+    callback(ok, err)
+  end)
 end
 
 local EXPIRY_SECONDS = 7 * 24 * 60 * 60
+
+M.config = {
+  session_retention_seconds = EXPIRY_SECONDS,
+  write_contention_max_retries = 3,
+  write_contention_backoff_ms = 50,
+}
+
+-- Sweeps *.duckdb files older than the retention window, same file-mtime
+-- based semantics as the prior JSON design (deliberately unchanged scope --
+-- see specs/review-storage.allium's open question on session_retention,
+-- inherited as-is).
+function M.cleanup_expired_now()
+  local files = vim.fn.glob(data_dir .. "/*.duckdb", false, true)
+  local now = os.time()
+  for _, filepath in ipairs(files) do
+    local mtime = vim.fn.getftime(filepath)
+    if mtime > 0 and (now - mtime) > M.config.session_retention_seconds then
+      os.remove(filepath)
+      schema_ready[filepath] = nil
+    end
+  end
+end
+
 local cleanup_done = false
 
 function M.cleanup_expired()
@@ -107,48 +217,15 @@ function M.cleanup_expired()
   cleanup_done = true
 
   vim.defer_fn(function()
-    local files = vim.fn.glob(data_dir .. "/*.json", false, true)
-    local now = os.time()
-    for _, filepath in ipairs(files) do
-      local mtime = vim.fn.getftime(filepath)
-      if mtime > 0 and (now - mtime) > EXPIRY_SECONDS then
-        os.remove(filepath)
-      end
-    end
+    M.cleanup_expired_now()
   end, 0)
-end
-
----@return table
-function M.load()
-  M.cleanup_expired()
-
-  local path = M.get_storage_path()
-  if not path then
-    return {}
-  end
-
-  local file = io.open(path, "r")
-  if not file then
-    return {}
-  end
-
-  local content = file:read("*a")
-  file:close()
-
-  if content and content ~= "" then
-    local ok, data = pcall(vim.fn.json_decode, content)
-    if ok and data then
-      return data
-    end
-  end
-
-  return {}
 end
 
 function M.clear()
   local path = M.get_storage_path()
   if path then
     os.remove(path)
+    schema_ready[path] = nil
   end
 end
 

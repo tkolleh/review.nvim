@@ -1,4 +1,5 @@
 local store = require("review.store")
+local helpers = require("tests.helpers")
 local marks = require("review.marks")
 local config = require("review.config")
 
@@ -30,7 +31,7 @@ describe("marks file_override", function()
 
   describe("render_for_buffer with file_override", function()
     it("renders comments using file_override path", function()
-      store.add("src/app.lua", 3, "issue", "Fix this")
+      helpers.add(store, "src/app.lua", 3, "issue", "Fix this")
 
       -- Buffer has no name, but file_override provides the path
       marks.render_for_buffer(bufnr, nil, "src/app.lua")
@@ -46,7 +47,7 @@ describe("marks file_override", function()
       -- Simulate the actual codediff URI format that breaks the old regex
       vim.api.nvim_buf_set_name(bufnr, "codediff:///Users/george/repo///abc123/src/app.lua")
 
-      store.add("src/app.lua", 3, "note", "A note")
+      helpers.add(store, "src/app.lua", 3, "note", "A note")
 
       -- Without file_override this would fail (old regex can't parse this URI)
       marks.render_for_buffer(bufnr, "new", "src/app.lua")
@@ -58,7 +59,7 @@ describe("marks file_override", function()
     end)
 
     it("normalizes file_override path (strips leading ./)", function()
-      store.add("src/app.lua", 3, "issue", "Fix")
+      helpers.add(store, "src/app.lua", 3, "issue", "Fix")
 
       marks.render_for_buffer(bufnr, nil, "./src/app.lua")
 
@@ -69,7 +70,7 @@ describe("marks file_override", function()
     end)
 
     it("normalizes file_override path (strips trailing slashes)", function()
-      store.add("src/app.lua", 3, "issue", "Fix")
+      helpers.add(store, "src/app.lua", 3, "issue", "Fix")
 
       marks.render_for_buffer(bufnr, nil, "src/app.lua/")
 
@@ -80,7 +81,7 @@ describe("marks file_override", function()
     end)
 
     it("renders nothing when file_override has no matching comments", function()
-      store.add("other_file.lua", 3, "issue", "Fix")
+      helpers.add(store, "other_file.lua", 3, "issue", "Fix")
 
       marks.render_for_buffer(bufnr, nil, "src/app.lua")
 
@@ -91,7 +92,7 @@ describe("marks file_override", function()
     end)
 
     it("passes side through when using file_override", function()
-      store.add("src/app.lua", 3, "issue", "Old side comment", nil, "old")
+      helpers.add(store, "src/app.lua", 3, "issue", "Old side comment", nil, "old")
 
       -- Request "new" side: should not find the "old" comment
       marks.render_for_buffer(bufnr, "new", "src/app.lua")
@@ -105,7 +106,7 @@ describe("marks file_override", function()
     it("falls back to buffer name when file_override is nil", function()
       vim.api.nvim_buf_set_name(bufnr, "src/fallback.lua")
 
-      store.add("src/fallback.lua", 3, "issue", "Fallback test")
+      helpers.add(store, "src/fallback.lua", 3, "issue", "Fallback test")
 
       marks.render_for_buffer(bufnr, nil, nil)
 

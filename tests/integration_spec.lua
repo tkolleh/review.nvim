@@ -1,4 +1,5 @@
 local store = require("review.store")
+local helpers = require("tests.helpers")
 local marks = require("review.marks")
 local config = require("review.config")
 
@@ -37,7 +38,7 @@ describe("review integration", function()
   describe("comments and marks", function()
     it("adds comment and renders extmark on buffer", function()
       -- Add a comment
-      store.add("test_file.lua", 3, "issue", "This function needs error handling")
+      helpers.add(store, "test_file.lua", 3, "issue", "This function needs error handling")
 
       -- Render marks
       marks.render_for_buffer(bufnr)
@@ -52,9 +53,9 @@ describe("review integration", function()
     end)
 
     it("renders multiple comments on different lines", function()
-      store.add("test_file.lua", 3, "issue", "Issue here")
-      store.add("test_file.lua", 7, "suggestion", "Consider refactoring")
-      store.add("test_file.lua", 4, "praise", "Nice and clean")
+      helpers.add(store, "test_file.lua", 3, "issue", "Issue here")
+      helpers.add(store, "test_file.lua", 7, "suggestion", "Consider refactoring")
+      helpers.add(store, "test_file.lua", 4, "praise", "Nice and clean")
 
       marks.render_for_buffer(bufnr)
 
@@ -65,7 +66,7 @@ describe("review integration", function()
     end)
 
     it("clears marks when comments are cleared", function()
-      store.add("test_file.lua", 3, "issue", "Issue here")
+      helpers.add(store, "test_file.lua", 3, "issue", "Issue here")
       marks.render_for_buffer(bufnr)
 
       local ns_id = vim.api.nvim_create_namespace("review")
@@ -81,7 +82,7 @@ describe("review integration", function()
     end)
 
     it("extmarks include virtual text with comment type", function()
-      store.add("test_file.lua", 3, "issue", "Fix this bug")
+      helpers.add(store, "test_file.lua", 3, "issue", "Fix this bug")
 
       marks.render_for_buffer(bufnr)
 
@@ -96,7 +97,7 @@ describe("review integration", function()
     end)
 
     it("extmarks include sign in gutter", function()
-      store.add("test_file.lua", 3, "note", "A note")
+      helpers.add(store, "test_file.lua", 3, "note", "A note")
 
       marks.render_for_buffer(bufnr)
 
@@ -113,7 +114,7 @@ describe("review integration", function()
       local cfg = config.get()
 
       for type_name, type_info in pairs(cfg.comment_types) do
-        store.add("test_file.lua", 3, type_name, "Test " .. type_name)
+        helpers.add(store, "test_file.lua", 3, type_name, "Test " .. type_name)
         marks.render_for_buffer(bufnr)
 
         local ns_id = vim.api.nvim_create_namespace("review")
@@ -130,8 +131,8 @@ describe("review integration", function()
 
   describe("export integration", function()
     it("exports comments from buffer to markdown", function()
-      store.add("test_file.lua", 3, "issue", "Missing error handling")
-      store.add("test_file.lua", 7, "suggestion", "Use local variable")
+      helpers.add(store, "test_file.lua", 3, "issue", "Missing error handling")
+      helpers.add(store, "test_file.lua", 7, "suggestion", "Use local variable")
 
       local export = require("review.export")
       local md = export.generate_markdown()
