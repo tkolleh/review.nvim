@@ -118,34 +118,40 @@ local function open_codediff_with_revisions(rev1, rev2)
 
   -- Load persisted comments (reset first so we load from the new storage path)
   store.reset()
-  store.load()
+  store.sync_from_storage(function(_, err)
+    if err then
+      vim.notify("review.nvim: failed to load comments: " .. err, vim.log.levels.WARN, { title = "review.nvim" })
+    end
 
-  -- Open CodeDiff
-  if rev1 and rev2 then
-    vim.cmd("CodeDiff " .. rev1 .. " " .. rev2)
-  else
-    vim.cmd("CodeDiff")
-  end
-
-  -- Wait for CodeDiff to initialize, then set up our hooks
-  local attempts = 0
-  local max_attempts = 5
-  local function try_setup()
-    attempts = attempts + 1
-    local lifecycle_ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
-    if lifecycle_ok then
-      local tabpage = vim.api.nvim_get_current_tabpage()
-      local sess = lifecycle.get_session(tabpage)
-      if sess then
-        M._check_codediff_session()
-        return
+    vim.schedule(function()
+      -- Open CodeDiff
+      if rev1 and rev2 then
+        vim.cmd("CodeDiff " .. rev1 .. " " .. rev2)
+      else
+        vim.cmd("CodeDiff")
       end
-    end
-    if attempts < max_attempts then
-      vim.defer_fn(try_setup, 100)
-    end
-  end
-  vim.defer_fn(try_setup, 200)
+
+      -- Wait for CodeDiff to initialize, then set up our hooks
+      local attempts = 0
+      local max_attempts = 5
+      local function try_setup()
+        attempts = attempts + 1
+        local lifecycle_ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
+        if lifecycle_ok then
+          local tabpage = vim.api.nvim_get_current_tabpage()
+          local sess = lifecycle.get_session(tabpage)
+          if sess then
+            M._check_codediff_session()
+            return
+          end
+        end
+        if attempts < max_attempts then
+          vim.defer_fn(try_setup, 100)
+        end
+      end
+      vim.defer_fn(try_setup, 200)
+    end)
+  end)
 end
 
 function M.open()
