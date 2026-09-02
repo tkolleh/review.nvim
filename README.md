@@ -10,6 +10,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 - Multi-line comment support with box-style virtual text display
 - Comments displayed as signs, line highlights, and virtual text
 - Comments persist per branch in a local DuckDB file (Neovim's XDG data directory: `~/.local/share/nvim/review/`), safe for multiple writers (e.g. you and an AI agent) commenting concurrently
+- An AI agent can read and add comments in that same file directly via a bundled skill — no need to open Neovim to join the review
 - Auto-export comments to clipboard when closing
 - Export format optimized for AI conversations
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
@@ -81,6 +82,20 @@ Press `q` to close the review — this copies all comments to the clipboard as s
 ```
 
 A `~` prefix means the old (left) side of the diff. Comments persist per branch and survive closing Neovim, expiring after 7 days. Storage is DuckDB, not a flat file, so another writer — a teammate on the same branch, or an AI agent — can comment on the same session concurrently without clobbering yours.
+
+## Agent comments
+
+An AI agent can join the review directly from the CLI, reading and adding comments in the same
+DuckDB file this plugin uses — no need to open Neovim. Comments an agent adds show up in your
+next `:Review` session, and comments you leave are visible to the agent's next read, so a human
+and an agent can converse in the same review thread.
+
+This is bundled as an [Agent Skill](https://agentskills.io) at [`skills/review-nvim`](skills/review-nvim); see its
+[SKILL.md](skills/review-nvim/SKILL.md) for usage. Install it with [`npx skills`](https://skills.sh):
+
+```bash
+npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/review-nvim
+```
 
 ## Keybindings (in diff view)
 
