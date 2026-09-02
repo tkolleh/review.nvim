@@ -9,7 +9,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 - Add comments to specific lines in diff view (Note, Suggestion, Issue, Praise)
 - Multi-line comment support with box-style virtual text display
 - Comments displayed as signs, line highlights, and virtual text
-- Comments persist per branch (stored in Neovim's XDG data directory: `~/.local/share/nvim/review/`)
+- Comments persist per branch in a local DuckDB file (Neovim's XDG data directory: `~/.local/share/nvim/review/`), safe for multiple writers (e.g. you and an AI agent) commenting concurrently
 - Auto-export comments to clipboard when closing
 - Export format optimized for AI conversations
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
@@ -21,6 +21,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 - Neovim >= 0.9
 - [codediff.nvim](https://github.com/esmuellert/codediff.nvim)
 - [nui.nvim](https://github.com/MunifTanjim/nui.nvim)
+- [`duckdb`](https://duckdb.org) CLI on your `$PATH` (used for comment storage)
 
 ## Installation
 
@@ -30,7 +31,7 @@ Using lazy.nvim:
 
 ```lua
 {
-  "georgeguimaraes/review.nvim",
+  "tkolleh/review.nvim",
   version = "v*",
   dependencies = {
     "esmuellert/codediff.nvim",
@@ -64,22 +65,22 @@ Using lazy.nvim:
 
 ## Workflow
 
-Open a review with `:Review` to see your staged and unstaged changes in a side-by-side diff, or `:Review commits` if you want to pick specific commits to review. The diff opens in a new tab with a file panel on the left.
+Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). The diff opens in a new tab with a file panel on the left.
 
-Navigate between files with `<Tab>` and `<S-Tab>`. Toggle the file panel with `f`. Press `t` to toggle between side-by-side and inline layout. Switch between the old (left) and new (right) panes with `<C-w>h` and `<C-w>l`. When you spot something worth commenting on, press `i` on the line and pick a comment type from the menu (note, suggestion, issue, praise). The comment renders inline as a box below the line with a sign icon in the gutter.
+Navigate with `<Tab>`/`<S-Tab>` (files), `f` (toggle file panel), `t` (side-by-side/inline), `<C-w>h`/`<C-w>l` (old/new pane). Press `i` on a line to comment; pick a type (note, suggestion, issue, praise) from the menu. The comment renders as a box below the line with a sign in the gutter.
 
-For multi-line comments, visually select the range first then press `i`. For file-level comments that apply to the whole file, press `F`. Comments on the left (old) side of the diff only show on that side, and same for the right (new) side.
+Visually select a range before `i` for a multi-line comment, or press `F` for a file-level comment. Left-side (old) and right-side (new) comments only show on their own side.
 
-Use `]n` and `[n` to jump between comments, `e` to edit one, `d` to delete. Press `c` to see a list of all comments across files and jump to any of them.
+Use `]n`/`[n` to jump between comments, `e` to edit, `d` to delete, `c` to list and jump to any comment.
 
-When you're done, press `q` to close the review. This automatically copies all your comments to the clipboard as structured markdown and shows a preview. Paste it into Claude Code, sidekick.nvim (`S`), or wherever you're chatting with an AI. The format looks like this:
+Press `q` to close the review — this copies all comments to the clipboard as structured markdown and shows a preview, ready to paste into Claude Code, sidekick.nvim (`S`), or any AI chat:
 
 ```
 1. **[ISSUE]** `src/api.ts:23` - This endpoint doesn't handle errors
 2. **[SUGGESTION]** `src/utils.ts:~10` - The old implementation was cleaner
 ```
 
-Lines prefixed with `~` refer to the old (left) side of the diff. Comments persist per branch, so you can close Neovim and come back to the same review later. Sessions auto-expire after 7 days.
+A `~` prefix means the old (left) side of the diff. Comments persist per branch and survive closing Neovim, expiring after 7 days. Storage is DuckDB, not a flat file, so another writer — a teammate on the same branch, or an AI agent — can comment on the same session concurrently without clobbering yours.
 
 ## Keybindings (in diff view)
 
