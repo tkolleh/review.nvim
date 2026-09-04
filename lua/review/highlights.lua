@@ -17,7 +17,6 @@ function M.setup()
     vim.api.nvim_set_hl(0, group, { link = link, default = true })
   end
 
-  -- Line highlights (darker background, no underline)
   vim.api.nvim_set_hl(0, "ReviewNoteLine", { bg = "#0d1f28", underline = false, default = true })
   vim.api.nvim_set_hl(0, "ReviewSuggestionLine", { bg = "#152015", underline = false, default = true })
   vim.api.nvim_set_hl(0, "ReviewIssueLine", { bg = "#28250d", underline = false, default = true })

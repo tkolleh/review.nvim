@@ -14,9 +14,8 @@ local function is_lock_contention(stderr)
 end
 
 ---Runs a single short-lived `duckdb <db_path> -c "<sql>"` subprocess call.
----Never holds the connection open beyond this one invocation, per
----specs/review-storage.allium's CommentAuthor @guidance (CLI-only, no
----libduckdb/FFI, no long-lived connection).
+---CLI-only, never a long-lived connection or FFI binding, so a crash or
+---hang in the subprocess can't take the editor down with it.
 ---@param db_path string
 ---@param sql string
 ---@param opts? { readonly?: boolean, timeout_ms?: number }
@@ -55,13 +54,10 @@ function M.query(db_path, sql, opts, callback)
   end)
 end
 
----Same as M.query, but automatically retries on DuckDB's "conflicting lock"
----IO Error (storage-access contention, specs/review-storage.allium's
----IndependentWritersDoNotCollide @guidance) up to
----config.write_contention_max_retries times, waiting
----config.write_contention_backoff_ms between attempts. Any other failure
----(including a genuine semantic rejection) is forwarded immediately,
----unretried.
+---Same as M.query, but retries on DuckDB's "conflicting lock" IO Error
+---(another writer briefly holding the file), up to max_retries times with
+---backoff_ms between attempts. Any other failure is forwarded immediately,
+---unretried, since retrying a genuine semantic rejection would just repeat it.
 ---@param db_path string
 ---@param sql string
 ---@param opts? { readonly?: boolean, timeout_ms?: number, max_retries?: number, backoff_ms?: number }

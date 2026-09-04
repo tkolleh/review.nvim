@@ -16,14 +16,12 @@ function M.generate_markdown()
 
   local lines = {}
 
-  -- Header
   table.insert(lines, "I reviewed your code and have the following comments. Please address them.")
   table.insert(lines, "")
   table.insert(lines, "Comment types: ISSUE (problems to fix), SUGGESTION (improvements), NOTE (observations), PRAISE (positive feedback)")
   table.insert(lines, "Lines prefixed with ~ refer to the old (left) side of the diff.")
   table.insert(lines, "")
 
-  -- Numbered list of comments
   for i, comment in ipairs(all_comments) do
     local type_name = string.upper(comment.type)
     local location
@@ -59,23 +57,20 @@ function M.to_clipboard()
   vim.fn.setreg("+", markdown)
   vim.fn.setreg("*", markdown)
 
-  -- Show content in a bottom split
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(markdown, "\n"))
   vim.api.nvim_set_option_value("filetype", "markdown", { buf = buf })
   vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
   vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = buf })
 
-  -- Remember current window to restore focus after closing
+  -- Restored on close since opening the split changes the current window
   local prev_win = vim.api.nvim_get_current_win()
 
-  -- Open at bottom with appropriate height
   local line_count = #vim.split(markdown, "\n")
   local height = math.min(line_count + 1, 15)
   vim.cmd("botright " .. height .. "split")
   vim.api.nvim_win_set_buf(0, buf)
 
-  -- Map q to close the preview and restore focus
   vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(0, true)
     if vim.api.nvim_win_is_valid(prev_win) then

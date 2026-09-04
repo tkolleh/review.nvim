@@ -182,7 +182,6 @@ end
 
 ---@param bufnr number
 local function set_buffer_keymaps(bufnr)
-  -- Clear existing keymaps first
   clear_buffer_keymaps(bufnr)
 
   local cfg = config.get()
@@ -204,7 +203,6 @@ local function set_buffer_keymaps(bufnr)
     end
   end
 
-  -- Helper to jump to first hunk in current file
   local function jump_to_first_hunk()
     local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
     if not ok then return end
@@ -223,7 +221,6 @@ local function set_buffer_keymaps(bufnr)
     pcall(vim.api.nvim_win_set_cursor, 0, { target_line, 0 })
   end
 
-  -- File navigation helper
   local function navigate(direction)
     return function()
       local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
@@ -267,7 +264,7 @@ local function set_buffer_keymaps(bufnr)
     set(km.edit_comment, function() comments.edit_at_cursor() end, "Edit comment")
   end
 
-  -- Navigation and close - available in both modes (or edit mode only for nav)
+  -- Unlike the add/edit/delete keymaps above, these apply regardless of readonly mode
   set(km.next_file, navigate("next"), "Next file")
   set(km.prev_file, navigate("prev"), "Previous file")
   set(km.toggle_file_panel, function()
@@ -286,7 +283,6 @@ local function set_buffer_keymaps(bufnr)
   keymapped_buffers[bufnr] = mapped
 end
 
--- Autocmd group for keymaps
 local augroup = nil
 
 ---@param tabpage number
@@ -297,22 +293,18 @@ function M.setup_keymaps(tabpage)
     return
   end
 
-  -- Clear old autocmds
   if augroup then
     vim.api.nvim_del_augroup_by_id(augroup)
   end
   augroup = vim.api.nvim_create_augroup("review_keymaps", { clear = true })
 
-  -- Clear keymaps from all tracked buffers
   for bufnr in pairs(keymapped_buffers) do
     clear_buffer_keymaps(bufnr)
   end
   keymapped_buffers = {}
 
-  -- Set keymaps on current buffer
   set_buffer_keymaps(vim.api.nvim_get_current_buf())
 
-  -- Set up autocmd to apply keymaps only on codediff diff buffers
   vim.api.nvim_create_autocmd("BufEnter", {
     group = augroup,
     callback = function()
@@ -330,7 +322,6 @@ function M.setup_keymaps(tabpage)
   })
 end
 
--- Clear keymaps from all tracked buffers
 function M.clear_keymaps()
   for bufnr in pairs(keymapped_buffers) do
     clear_buffer_keymaps(bufnr)
@@ -338,7 +329,6 @@ function M.clear_keymaps()
   keymapped_buffers = {}
 end
 
--- Cleanup augroup when session closes
 function M.cleanup()
   if augroup then
     vim.api.nvim_del_augroup_by_id(augroup)

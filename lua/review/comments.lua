@@ -102,10 +102,9 @@ function M.add_for_range(initial_type)
   end)
 end
 
----Resolves the comment at the cursor that `current_user()` may act on,
----prompting with a picker when more than one comment exists at that
----file/line and the author owns none or more than one of them
----(specs/review-storage.allium SelectingAmbiguousComment).
+---Prompts with a picker only when ownership is ambiguous (zero or multiple
+---comments at this file/line belong to the current author), so an
+---unambiguous case never interrupts the user.
 ---@param file string
 ---@param line number
 ---@param callback fun(comment: Comment)
@@ -243,7 +242,6 @@ function M.list()
     return
   end
 
-  -- Build display items
   local items = {}
   for _, comment in ipairs(all_comments) do
     local type_info = config.comment_types[comment.type]
@@ -268,7 +266,6 @@ function M.list()
     table.insert(items, { display = display, comment = comment })
   end
 
-  -- Show picker
   vim.ui.select(items, {
     prompt = "Comments:",
     format_item = function(item)
@@ -281,7 +278,8 @@ function M.list()
 
     local comment = choice.comment
 
-    -- Try to navigate to the file in codediff explorer
+    -- codediff.ui.explorer is optional; navigation is best-effort and
+    -- silently no-ops if the explorer pane isn't open
     local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
     if ok then
       local tabpage = hooks.get_current_tabpage()
@@ -289,8 +287,6 @@ function M.list()
         local explorer = lifecycle.get_explorer(tabpage)
         if explorer then
           local explorer_mod = require("codediff.ui.explorer")
-          -- Find and select the file in explorer
-          -- This is a best-effort navigation
           for i, node in ipairs(explorer.tree:get_nodes()) do
             if node.path == comment.file then
               explorer_mod.select_node(explorer, node)
@@ -301,7 +297,7 @@ function M.list()
       end
     end
 
-    -- Jump to line after a short delay (line 1 for file-level comments)
+    -- Defer so the cursor move happens after explorer navigation settles
     vim.defer_fn(function()
       local target_line = comment.line == 0 and 1 or comment.line
       pcall(vim.api.nvim_win_set_cursor, 0, { target_line, 0 })

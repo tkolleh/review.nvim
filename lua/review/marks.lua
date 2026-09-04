@@ -9,7 +9,7 @@ local ns_padding = vim.api.nvim_create_namespace("review_padding")
 
 local MIN_CONTENT_WIDTH = 20
 local DEFAULT_CONTENT_WIDTH = 60
--- "│ " + " │" border/padding chars around the box's text column.
+-- 4 border/padding columns ("│ " + " │") flank the box's text column.
 local BOX_BORDER_OVERHEAD = 4
 
 ---@type table<string, string> hex -> lazily-registered highlight group name
@@ -18,8 +18,7 @@ local author_hl_cache = {}
 ---Resolves (and lazily registers) the highlight group for a comment's
 ---author-derived border color, picking color_dark/color_light per the live
 ---`:set background` value. Falls back to fallback_hl when the comment
----predates the color_dark/color_light columns (a .duckdb file created before
----this feature existed -- see storage.lua's schema comment).
+---predates the color columns (an older .duckdb file).
 ---@param comment table
 ---@param fallback_hl string
 ---@return string hl_group
@@ -251,7 +250,6 @@ function M.render_for_buffer(bufnr, side, file_override)
   end
 end
 
----Calculate the height of a comment's virtual line box
 ---@param comment table
 ---@param max_width number
 ---@return number height, number attach_line (0-indexed)
@@ -261,7 +259,7 @@ local function comment_box_height(comment, max_width)
   for _, text_line in ipairs(text_lines) do
     rendered_line_count = rendered_line_count + #wrap_line(text_line, max_width)
   end
-  local height = rendered_line_count + 2 -- top border + content + bottom border
+  local height = rendered_line_count + 2 -- + top and bottom border lines
   local attach_line
   if comment.line == 0 then
     attach_line = 0
@@ -271,7 +269,6 @@ local function comment_box_height(comment, max_width)
   return height, attach_line
 end
 
----Add blank padding lines on one buffer to match comment boxes on the other
 ---@param orig_buf number
 ---@param mod_buf number
 ---@param orig_file string|nil
@@ -291,8 +288,8 @@ function M.align_buffers(orig_buf, mod_buf, orig_file, mod_file)
     return
   end
 
-  -- Build height maps: attach_line -> total virt_line height per side
-  -- Skip file comments (line 0) since they render identically on both sides
+  -- Skip file comments (line 0): they render identically on both sides, so
+  -- they never cause a height mismatch that needs padding
   local function build_height_map(bufnr, file, side)
     if not file then return {} end
     local max_width = window_content_width(bufnr)

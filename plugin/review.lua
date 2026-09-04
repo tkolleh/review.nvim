@@ -21,14 +21,12 @@ vim.api.nvim_create_user_command("Review", function(opts)
   local args = opts.fargs
   local cmd = args[1]
 
-  -- Default to "open" if no subcommand
   if not cmd or cmd == "" then
     cmd = "open"
   end
 
   local subcmd = subcommands[cmd]
   if subcmd then
-    -- Pass remaining args to the subcommand
     local subargs = { unpack(args, 2) }
     subcmd.fn(subargs)
   else
@@ -38,7 +36,7 @@ end, {
   nargs = "*",
   complete = function(arg_lead, cmd_line)
     local parts = vim.split(cmd_line, "%s+", { trimempty = true })
-    -- If still typing first arg (subcommand), complete subcommands
+    -- Only complete subcommand names; args after that are subcommand-specific
     if #parts <= 2 then
       return vim.tbl_filter(function(c)
         return c:find(arg_lead, 1, true) == 1

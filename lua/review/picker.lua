@@ -260,7 +260,6 @@ function M.open(callback)
     end,
   })
 
-  -- Keymaps using nui's map method
   local map_opts = { noremap = true, nowait = true }
   popup:map("n", "<Space>", toggle_range, map_opts)
   popup:map("n", "<CR>", function() confirm_selection(callback) end, map_opts)

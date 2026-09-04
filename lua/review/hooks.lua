@@ -56,12 +56,9 @@ local function set_buffer_filetype(bufnr, path)
 
   local ft = vim.filetype.match({ filename = path, buf = bufnr })
   if ft then
-    -- Try to use treesitter directly for syntax highlighting without
-    -- triggering FileType autocmds from other plugins
     local lang = vim.treesitter.language.get_lang(ft) or ft
     local ts_ok = pcall(vim.treesitter.start, bufnr, lang)
     if not ts_ok then
-      -- Fallback: set filetype if treesitter doesn't support the language
       vim.api.nvim_set_option_value("filetype", ft, { buf = bufnr })
     end
   end
@@ -143,11 +140,9 @@ function M.get_cursor_position()
   local cursor = vim.api.nvim_win_get_cursor(0)
   local current_buf = vim.api.nvim_get_current_buf()
 
-  -- Get paths from session
   local orig_path, mod_path = lifecycle.get_paths(current_tabpage)
   local orig_buf, mod_buf = lifecycle.get_buffers(current_tabpage)
 
-  -- Determine which file we're on based on buffer
   local file_path
   local side
   if current_buf == orig_buf then
@@ -157,10 +152,8 @@ function M.get_cursor_position()
     file_path = mod_path
     side = "new"
   else
-    -- Try to get path from buffer name
     local bufname = vim.api.nvim_buf_get_name(current_buf)
     if bufname and bufname ~= "" then
-      -- Strip codediff:// prefix if present
       if bufname:match("^codediff://") then
         file_path = mod_path or orig_path
       else
@@ -217,7 +210,6 @@ function M.get_paths()
     relativize_path(mod_path, lifecycle, current_tabpage)
 end
 
--- Called when codediff session is created
 function M.on_session_created(tabpage)
   current_tabpage = tabpage
   start_sync_timer()
@@ -229,12 +221,12 @@ function M.on_session_created(tabpage)
 
   local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
 
-  -- Set filetype for syntax highlighting (needed for commit reviews)
+  -- Needed here since commit reviews build buffers without going through
+  -- normal file-open filetype detection
   local raw_orig_path, raw_mod_path = lifecycle.get_paths(tabpage)
   set_buffer_filetype(orig_buf, to_path_string(raw_orig_path))
   set_buffer_filetype(mod_buf, to_path_string(raw_mod_path))
 
-  -- Make buffers readonly if configured
   local cfg = config.get()
   if cfg.codediff.readonly then
     if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
@@ -247,15 +239,14 @@ function M.on_session_created(tabpage)
     end
   end
 
-  -- Clear old autocmds
   if buf_augroup then
     pcall(vim.api.nvim_del_augroup_by_id, buf_augroup)
   end
   buf_augroup =
     vim.api.nvim_create_augroup("review_buf_marks", { clear = true })
 
-  -- Set up BufEnter autocmd to render marks when entering codediff buffers
-  -- This ensures marks are rendered even if buffers weren't ready initially
+  -- Re-render on BufEnter too, in case the initial deferred render below
+  -- ran before these buffers existed
   vim.api.nvim_create_autocmd("BufEnter", {
     group = buf_augroup,
     callback = function()
@@ -271,12 +262,11 @@ function M.on_session_created(tabpage)
     end,
   })
 
-  -- Initial render with delay for buffers to be ready
+  -- Deferred since buffers may not be fully ready immediately after session creation
   vim.defer_fn(function()
     marks.refresh()
   end, 100)
 
-  -- Focus the modified (right) pane
   vim.defer_fn(function()
     M._focus_modified_pane(lifecycle, tabpage)
   end, 150)
@@ -297,11 +287,9 @@ function M._focus_modified_pane(lifecycle, tabpage)
   end
 end
 
--- Called when codediff session is closed
 function M.on_session_closed()
   current_tabpage = nil
   stop_sync_timer()
-  -- Clean up autocmds
   if buf_augroup then
     pcall(vim.api.nvim_del_augroup_by_id, buf_augroup)
     buf_augroup = nil
@@ -309,7 +297,6 @@ function M.on_session_closed()
   require("review.keymaps").cleanup()
 end
 
--- Called when file changes in explorer mode
 function M.on_file_changed(tabpage)
   current_tabpage = tabpage
 
@@ -320,12 +307,10 @@ function M.on_file_changed(tabpage)
 
   local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
 
-  -- Set syntax highlighting for the new file's buffers
   local raw_orig_path, raw_mod_path = lifecycle.get_paths(tabpage)
   set_buffer_filetype(orig_buf, to_path_string(raw_orig_path))
   set_buffer_filetype(mod_buf, to_path_string(raw_mod_path))
 
-  -- Make buffers readonly if configured
   local cfg = config.get()
   if cfg.codediff.readonly then
     if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
@@ -338,7 +323,6 @@ function M.on_file_changed(tabpage)
     end
   end
 
-  -- Re-render comments
   vim.defer_fn(function()
     marks.refresh()
   end, 50)

@@ -2,13 +2,8 @@ local M = {}
 
 local duckdb = require("review.duckdb")
 
--- REVIEW_NVIM_TEST_DATA_DIR lets the test suite isolate each spec-file
--- subprocess's storage from the real XDG path (PlenaryBustedDirectory runs
--- spec files as separate concurrent `nvim --headless` processes, per
--- plenary's test_harness.lua; without this, they all race on the same
--- real ~/.local/share/nvim/review/<hash>-<branch>.duckdb file, which under
--- DuckDB's single-writer-excludes-everyone locking model would hard-fail
--- with a "Conflicting lock" IO Error rather than silently interleaving).
+-- Overridable so concurrent test processes each get an isolated storage
+-- dir; sharing the real XDG path would hit DuckDB's single-writer lock.
 local data_dir = os.getenv("REVIEW_NVIM_TEST_DATA_DIR") or (vim.fn.stdpath("data") .. "/review")
 
 ---@type {rev1: string, rev2: string}|nil
@@ -114,7 +109,7 @@ function M.get_storage_path()
 
   local project_hash = hash(git_root)
 
-  -- Ensure directory exists (pcall to suppress error if exists)
+  -- pcall since mkdir errors if the directory already exists
   pcall(vim.fn.mkdir, data_dir, "p")
 
   if current_revisions then
@@ -132,11 +127,9 @@ function M.get_storage_path()
   return string.format("%s/%s-%s.duckdb", data_dir, project_hash, safe_branch)
 end
 
--- Per-author border colors, keyed by the same hash bucket in both palettes
--- so an author keeps one hue identity across `:set background`. Validated
--- with the color-accessibility skill: DARK clears 7-13:1 against a #1e1e2e
--- background, LIGHT clears 4.7-5.3:1 AA against #eff1f5. Mirrored in
--- skills/review-nvim/main.py's SCHEMA_SQL -- keep both in sync.
+-- Same hash bucket in both palettes so an author keeps one hue identity
+-- across `:set background`; both are WCAG AA-contrast validated.
+-- Mirrored in skills/review-nvim/main.py's SCHEMA_SQL -- keep both in sync.
 local AUTHOR_PALETTE_DARK = {
   "#89b4fa", "#f38ba8", "#a6e3a1", "#fab387",
   "#cba6f7", "#94e2d5", "#f9e2af", "#eba0ac",
@@ -162,17 +155,14 @@ local function author_color_expr(palette)
   )
 end
 
--- Schema DDL, mirroring docs/research/duckdb-storage-backend.md SS2. Batched
--- into a single -c invocation so schema bootstrap is one short-lived
--- open-write-close subprocess call, not three.
+-- Both CREATE TABLEs batched into a single -c invocation so schema bootstrap
+-- is one short-lived open-write-close subprocess call, not two.
 --
 -- color_dark/color_light are GENERATED ALWAYS AS columns, computed by DuckDB
--- at insert time -- not retrofittable onto an existing table (DuckDB 1.5.5
--- rejects `ALTER TABLE ... ADD COLUMN ... GENERATED`), so a pre-existing
--- .duckdb file from before this column existed won't gain it. That's
--- intentional: review comments are disposable per specs/review-storage.allium's
--- session-retention semantics, and `:Review clear` already resets a session's
--- storage file on demand.
+-- at insert time -- not retrofittable onto an existing table (DuckDB rejects
+-- `ALTER TABLE ... ADD COLUMN ... GENERATED`), so a pre-existing .duckdb file
+-- predating this column won't gain it. Comments are disposable, and
+-- `:Review clear` already resets a session's storage file on demand.
 local SCHEMA_SQL = string.format([[
 CREATE TABLE IF NOT EXISTS review_sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -232,10 +222,9 @@ M.config = {
   write_contention_backoff_ms = 50,
 }
 
--- Sweeps *.duckdb files older than the retention window, same file-mtime
--- based semantics as the prior JSON design (deliberately unchanged scope --
--- see specs/review-storage.allium's open question on session_retention,
--- inherited as-is).
+-- Sweeps *.duckdb files older than the retention window, using file mtime
+-- rather than tracking session activity -- simple and good enough since
+-- storage files are disposable per-branch caches, not durable records.
 function M.cleanup_expired_now()
   local files = vim.fn.glob(data_dir .. "/*.duckdb", false, true)
   local now = os.time()

@@ -56,13 +56,10 @@ local function row_to_comment(row)
   }
 end
 
----Re-reads the current session's db file and merges it into the in-memory
----cache: rows absent from the cache are added, rows present in both are
----refreshed in place, and cached rows no longer present in storage are
----dropped. This is how a concurrent external writer's (e.g. an agent's)
----comments become visible to this process -- review.nvim's own writes
----already update the cache directly in their write callback and don't
----need this round-trip (specs/review-storage.allium's ReadYourWrites).
+---Merges the db file into the in-memory cache (add/update/remove) so a
+---concurrent external writer's (e.g. an agent's) comments become visible.
+---review.nvim's own writes update the cache directly and skip this
+---round-trip, since a write already knows its own result.
 ---@param callback? fun(ok: boolean, err: string|nil)
 function M.sync_from_storage(callback)
   callback = callback or function() end
@@ -114,10 +111,9 @@ function M.sync_from_storage(callback)
   end)
 end
 
----Runs sql (via storage.ensure_schema -> duckdb.query_with_retry) against
----the current session's db file, honoring the write-contention retry
----config (specs/review-storage.allium's IndependentWritersDoNotCollide
----@guidance).
+---Runs sql against the current session's db file, retrying on lock
+---contention so independent writers (this process and e.g. an agent's)
+---don't fail each other's writes.
 ---@param sql string
 ---@param callback fun(ok: boolean, result: table[]|nil, err: string|nil)
 local function write(sql, callback)
@@ -237,11 +233,8 @@ function M.get_for_file(file, side)
 end
 
 ---@param file string
----@param author? string When given, only a file comment by this author matches
----(specs/review-storage.allium's IndependentWritersDoNotCollide guarantee
----applies per-author to file-scoped comments same as line-scoped ones —
----without this filter, one author's "add file comment" could silently
----edit another author's file comment instead of creating their own).
+---@param author? string When given, scopes the match to this author so one
+---author's "add file comment" can't silently edit another's
 ---@return Comment|nil
 function M.get_file_comment(file, author)
   local comments = M.comments[file] or {}
@@ -329,8 +322,8 @@ function M.update(id, expected_prior_content, new_content, new_type, callback)
     end
 
     if #result == 0 then
-      -- Either the id doesn't exist, or expected_prior_content is stale.
-      -- Disambiguate with a cheap follow-up read on this (rare) path only.
+      -- Zero rows means either no such id or a stale expected_prior_content;
+      -- a cheap follow-up read disambiguates without slowing the common path.
       local path = db_path()
       duckdb.query(
         path,

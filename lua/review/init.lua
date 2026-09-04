@@ -21,7 +21,6 @@ function M.setup(opts)
   config.setup(opts)
   highlights.setup()
 
-  -- Set up autocmd to detect CodeDiff sessions
   augroup = vim.api.nvim_create_augroup("review", { clear = true })
 
   vim.api.nvim_create_autocmd("TabEnter", {
@@ -65,7 +64,6 @@ function M.setup(opts)
   initialized = true
 end
 
--- Handle file selection: refresh hooks/keymaps without stealing focus
 function M._on_file_select()
   local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
   if not ok then
@@ -82,7 +80,6 @@ function M._on_file_select()
   keymaps.setup_keymaps(tabpage)
 end
 
--- Check if current tab is a CodeDiff session and set up hooks/keymaps
 function M._check_codediff_session()
   local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
   if not ok then
@@ -95,10 +92,7 @@ function M._check_codediff_session()
     return
   end
 
-  -- Set up hooks
   hooks.on_session_created(tabpage)
-
-  -- Set up keymaps (uses codediff's set_tab_keymap internally)
   keymaps.setup_keymaps(tabpage)
 end
 
@@ -109,14 +103,14 @@ local function open_codediff_with_revisions(rev1, rev2)
     return
   end
 
-  -- Scope storage to revision range for commit reviews
+  -- A commit-range review gets its own storage file, separate from the branch-wide one
   if rev1 and rev2 then
     storage.set_revisions(rev1, rev2)
   else
     storage.clear_revisions()
   end
 
-  -- Load persisted comments (reset first so we load from the new storage path)
+  -- Reset first so the load below reads from the (possibly new) storage path above
   store.reset()
   store.sync_from_storage(function(_, err)
     if err then
@@ -124,14 +118,13 @@ local function open_codediff_with_revisions(rev1, rev2)
     end
 
     vim.schedule(function()
-      -- Open CodeDiff
       if rev1 and rev2 then
         vim.cmd("CodeDiff " .. rev1 .. " " .. rev2)
       else
         vim.cmd("CodeDiff")
       end
 
-      -- Wait for CodeDiff to initialize, then set up our hooks
+      -- Retries since the session may not exist yet right after :CodeDiff runs
       local attempts = 0
       local max_attempts = 5
       local function try_setup()
@@ -170,7 +163,6 @@ function M.open_commits(rev1, rev2)
 end
 
 function M.close()
-  -- Export comments to clipboard before closing
   local count = store.count()
   if count > 0 then
     local markdown = export.generate_markdown()
@@ -179,7 +171,6 @@ function M.close()
     vim.notify(string.format("Exported %d comment(s) to clipboard", count), vim.log.levels.INFO, { title = "review.nvim" })
   end
 
-  -- Close the tab
   vim.cmd("tabclose")
   hooks.on_session_closed()
   storage.clear_revisions()
@@ -235,7 +226,6 @@ function M.toggle_readonly()
 
   local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
 
-  -- Update buffer readonly state
   if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
     vim.api.nvim_set_option_value("modifiable", not cfg.codediff.readonly, { buf = orig_buf })
     vim.api.nvim_set_option_value("readonly", cfg.codediff.readonly, { buf = orig_buf })
@@ -245,7 +235,6 @@ function M.toggle_readonly()
     vim.api.nvim_set_option_value("readonly", cfg.codediff.readonly, { buf = mod_buf })
   end
 
-  -- Re-setup keymaps with new readonly state
   keymaps.clear_keymaps()
   keymaps.setup_keymaps(tabpage)
 
