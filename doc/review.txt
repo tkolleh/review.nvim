@@ -1,7 +1,7 @@
 *review.txt*  Code review annotations for codediff.nvim
 
-Author: George Guimarães
-License: MIT
+Author: George Guimarães (original), TJ Kolleh (fork maintainer)
+License: Apache-2.0
 
 ==============================================================================
 CONTENTS                                                     *review-contents*
@@ -22,6 +22,10 @@ review.nvim adds code review annotations on top of |codediff.nvim|: leave
 comments (note, suggestion, issue, praise) on lines in a diff view, then
 export them to clipboard or sidekick.nvim for AI chat. See the README for
 full feature list and workflow: https://github.com/tkolleh/review.nvim
+
+This is a hard fork of georgeguimaraes/review.nvim (v2.0.0), rewriting the
+storage layer onto DuckDB for multi-writer support and shifting direction
+toward general-purpose multi-author commenting. See the README for details.
 
 ==============================================================================
 2. REQUIREMENTS                                          *review-requirements*
