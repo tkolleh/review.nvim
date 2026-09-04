@@ -12,6 +12,8 @@ local duckdb = require("review.duckdb")
 ---@field type "note"|"suggestion"|"issue"|"praise"
 ---@field text string
 ---@field author string
+---@field color_dark? string DuckDB-computed hex, for `:set background=dark`; absent on rows predating this column
+---@field color_light? string DuckDB-computed hex, for `:set background=light`; absent on rows predating this column
 ---@field lifecycle_state "submitted"|"resolved"
 ---@field created_at number
 
@@ -47,6 +49,8 @@ local function row_to_comment(row)
     type = row.comment_type,
     text = row.content,
     author = row.author,
+    color_dark = row.color_dark,
+    color_light = row.color_light,
     lifecycle_state = row.lifecycle_state,
     created_at = row.created_at,
   }
@@ -165,7 +169,7 @@ function M.add(file, line, type, text, line_end, side, author, callback)
   local sql = string.format(
     [[INSERT INTO review_comments (comment_scope, file_path, line_start, line_end, side, comment_type, content, author)
       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-      RETURNING id, created_at;]],
+      RETURNING id, created_at, color_dark, color_light;]],
     literal(scope),
     literal(file),
     scope == "file" and "NULL" or literal(line),
@@ -192,6 +196,8 @@ function M.add(file, line, type, text, line_end, side, author, callback)
       type = type,
       text = text,
       author = resolved_author,
+      color_dark = row.color_dark,
+      color_light = row.color_light,
       lifecycle_state = "submitted",
       created_at = row.created_at,
     }

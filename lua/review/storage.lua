@@ -132,10 +132,48 @@ function M.get_storage_path()
   return string.format("%s/%s-%s.duckdb", data_dir, project_hash, safe_branch)
 end
 
+-- Per-author border colors, keyed by the same hash bucket in both palettes
+-- so an author keeps one hue identity across `:set background`. Validated
+-- with the color-accessibility skill: DARK clears 7-13:1 against a #1e1e2e
+-- background, LIGHT clears 4.7-5.3:1 AA against #eff1f5. Mirrored in
+-- skills/review-nvim/main.py's SCHEMA_SQL -- keep both in sync.
+local AUTHOR_PALETTE_DARK = {
+  "#89b4fa", "#f38ba8", "#a6e3a1", "#fab387",
+  "#cba6f7", "#94e2d5", "#f9e2af", "#eba0ac",
+}
+local AUTHOR_PALETTE_LIGHT = {
+  "#0a5de3", "#d3144a", "#2a7723", "#b14807",
+  "#8733ed", "#207567", "#825c0a", "#cc2944",
+}
+
+---Builds a `list_extract(...)` SQL expression that deterministically maps
+---the `author` column into one entry of palette via DuckDB's own hash().
+---@param palette string[]
+---@return string sql_expr
+local function author_color_expr(palette)
+  local quoted = {}
+  for i, hex in ipairs(palette) do
+    quoted[i] = "'" .. hex .. "'"
+  end
+  return string.format(
+    "list_extract([%s], CAST(hash(author) %% %d AS BIGINT) + 1)",
+    table.concat(quoted, ", "),
+    #palette
+  )
+end
+
 -- Schema DDL, mirroring docs/research/duckdb-storage-backend.md SS2. Batched
 -- into a single -c invocation so schema bootstrap is one short-lived
 -- open-write-close subprocess call, not three.
-local SCHEMA_SQL = [[
+--
+-- color_dark/color_light are GENERATED ALWAYS AS columns, computed by DuckDB
+-- at insert time -- not retrofittable onto an existing table (DuckDB 1.5.5
+-- rejects `ALTER TABLE ... ADD COLUMN ... GENERATED`), so a pre-existing
+-- .duckdb file from before this column existed won't gain it. That's
+-- intentional: review comments are disposable per specs/review-storage.allium's
+-- session-retention semantics, and `:Review clear` already resets a session's
+-- storage file on demand.
+local SCHEMA_SQL = string.format([[
 CREATE TABLE IF NOT EXISTS review_sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_root    VARCHAR NOT NULL,
@@ -155,12 +193,14 @@ CREATE TABLE IF NOT EXISTS review_comments (
     comment_type    VARCHAR NOT NULL CHECK (comment_type IN ('note', 'suggestion', 'issue', 'praise')),
     content         VARCHAR NOT NULL,
     author          VARCHAR NOT NULL DEFAULT 'user',
+    color_dark      VARCHAR GENERATED ALWAYS AS (%s),
+    color_light     VARCHAR GENERATED ALWAYS AS (%s),
     lifecycle_state VARCHAR NOT NULL DEFAULT 'submitted',
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_comments_file ON review_comments(file_path);
-]]
+]], author_color_expr(AUTHOR_PALETTE_DARK), author_color_expr(AUTHOR_PALETTE_LIGHT))
 
 ---@type table<string, boolean>
 local schema_ready = {}

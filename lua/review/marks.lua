@@ -12,6 +12,34 @@ local DEFAULT_CONTENT_WIDTH = 60
 -- "│ " + " │" border/padding chars around the box's text column.
 local BOX_BORDER_OVERHEAD = 4
 
+---@type table<string, string> hex -> lazily-registered highlight group name
+local author_hl_cache = {}
+
+---Resolves (and lazily registers) the highlight group for a comment's
+---author-derived border color, picking color_dark/color_light per the live
+---`:set background` value. Falls back to fallback_hl when the comment
+---predates the color_dark/color_light columns (a .duckdb file created before
+---this feature existed -- see storage.lua's schema comment).
+---@param comment table
+---@param fallback_hl string
+---@return string hl_group
+local function resolve_author_hl(comment, fallback_hl)
+  local hex = vim.o.background == "light" and comment.color_light or comment.color_dark
+  if not hex then
+    return fallback_hl
+  end
+
+  local cached = author_hl_cache[hex]
+  if cached then
+    return cached
+  end
+
+  local group = "ReviewAuthorBorder_" .. hex:sub(2)
+  vim.api.nvim_set_hl(0, group, { fg = hex, default = true })
+  author_hl_cache[hex] = group
+  return group
+end
+
 ---Greedily wrap text on whitespace so no rendered line exceeds max_width display
 ---columns. A single word wider than max_width is hard-split by character rather
 ---than left to overflow.
@@ -75,10 +103,11 @@ end
 
 ---@param text string
 ---@param type_name string
----@param hl string
+---@param hl string highlights the header label and comment text
 ---@param max_width number
+---@param author_hl string highlights the box-drawing border characters
 ---@return table[] virt_lines
-local function build_comment_box(text, type_name, hl, max_width)
+local function build_comment_box(text, type_name, hl, max_width, author_hl)
   local virt_lines = {}
   local text_lines = vim.split(text, "\n")
 
@@ -95,14 +124,22 @@ local function build_comment_box(text, type_name, hl, max_width)
   local content_width = math.max(max_text_width, MIN_CONTENT_WIDTH)
 
   local top_dashes = content_width - vim.fn.strdisplaywidth(header_text) + 1
-  table.insert(virt_lines, { { "╭─" .. header_text .. string.rep("─", top_dashes) .. "╮", hl } })
+  table.insert(virt_lines, {
+    { "╭─", author_hl },
+    { header_text, hl },
+    { string.rep("─", top_dashes) .. "╮", author_hl },
+  })
 
   for _, rendered_line in ipairs(rendered_lines) do
     local padding = content_width - vim.fn.strdisplaywidth(rendered_line)
-    table.insert(virt_lines, { { "│ " .. rendered_line .. string.rep(" ", padding) .. " │", hl } })
+    table.insert(virt_lines, {
+      { "│ ", author_hl },
+      { rendered_line .. string.rep(" ", padding), hl },
+      { " │", author_hl },
+    })
   end
 
-  table.insert(virt_lines, { { "╰" .. string.rep("─", content_width + 2) .. "╯", hl } })
+  table.insert(virt_lines, { { "╰" .. string.rep("─", content_width + 2) .. "╯", author_hl } })
   return virt_lines
 end
 
@@ -150,7 +187,8 @@ function M.render_for_buffer(bufnr, side, file_override)
     local hl = type_info and type_info.hl or "ReviewSign"
     local line_hl = type_info and type_info.line_hl
     local name = type_info and type_info.name or comment.type
-    local virt_lines = build_comment_box(comment.text, name, hl, max_width)
+    local author_hl = resolve_author_hl(comment, hl)
+    local virt_lines = build_comment_box(comment.text, name, hl, max_width, author_hl)
 
     if comment.line == 0 then
       pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, 0, 0, {
