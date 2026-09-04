@@ -108,6 +108,7 @@ npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/re
 | Key | Action |
 |-----|--------|
 | `i` | Add comment (pick type from menu) |
+| `F` | Add file-level comment |
 | `d` | Delete comment at cursor |
 | `e` | Edit comment at cursor |
 | `c` | List all comments |
@@ -121,6 +122,7 @@ npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/re
 | `S` | Send comments to sidekick.nvim |
 | `<C-r>` | Clear all comments |
 | `q` | Close and export comments to clipboard |
+| `?` | Show review.nvim keymap help |
 | `t` | Toggle side-by-side/inline layout |
 | `g?` | Show codediff help |
 
@@ -129,6 +131,7 @@ npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/re
 |-----|--------|
 | `<localleader>cc` | Add comment (pick type from menu) |
 | `<localleader>cn/cs/ci/cp` | Add Note/Suggestion/Issue/Praise |
+| `<localleader>cf` | Add file-level comment |
 | `<localleader>cd` | Delete comment |
 | `<localleader>ce` | Edit comment |
 
@@ -152,6 +155,7 @@ All keymaps can be set to `false` to disable them.
 | `add_suggestion` | `<localleader>cs` | Add suggestion (edit mode) |
 | `add_issue` | `<localleader>ci` | Add issue (edit mode) |
 | `add_praise` | `<localleader>cp` | Add praise (edit mode) |
+| `add_file_comment` | `<localleader>cf` | Add file-level comment (edit mode) |
 | `delete_comment` | `<localleader>cd` | Delete comment (edit mode) |
 | `edit_comment` | `<localleader>ce` | Edit comment (edit mode) |
 | `next_comment` | `]n` | Next comment |
@@ -168,6 +172,8 @@ All keymaps can be set to `false` to disable them.
 | `readonly_add` | `i` | Add comment (readonly mode) |
 | `readonly_delete` | `d` | Delete comment (readonly mode) |
 | `readonly_edit` | `e` | Edit comment (readonly mode) |
+| `readonly_add_file` | `F` | Add file-level comment (readonly mode) |
+| `show_help` | `?` | Show review.nvim keymap help |
 | `popup_submit` | `<C-s>` | Submit comment (popup, insert & normal) |
 | `popup_cancel` | `q` | Cancel comment (popup, normal mode) |
 | `popup_cycle_type` | `<Tab>` | Cycle comment type (popup) |
