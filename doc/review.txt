@@ -211,6 +211,13 @@ calling setup() or in a |ColorScheme| autocommand.
   `ReviewIssueLine`         #28250d           Issue line background
   `ReviewPraiseLine`        #15152a           Praise line background
 
+A comment box's border (the `╭─╮`/`│ │`/`╰─╯` characters only -- not the
+header label or comment text, which stay on the type highlight above) is
+additionally colored per author. This is always on and not configurable.
+The color is deterministic per author string, adapts to |'background'|
+automatically, and is rendered through a lazily-registered highlight group
+named `ReviewAuthorBorder_{hex}` (created on first use, cached thereafter).
+
 ==============================================================================
 7. EXPORT FORMAT                                              *review-export*
 
@@ -226,6 +233,13 @@ Comments are stored in a DuckDB file per branch or revision range: >
 <
 Safe for concurrent writers (you, a teammate, an AI agent). Sessions expire
 after 7 days. See the README's Features section for details.
+
+The `review_comments` table has `color_dark`/`color_light` columns,
+GENERATED ALWAYS AS columns that DuckDB computes at insert time by hashing
+the `author` column into a fixed palette. Since DuckDB cannot add a
+generated column to an already-existing table, this only takes effect for
+sessions created after upgrading -- run `:Review-clear` to reset an older
+session's storage file if it's missing author colors.
 
 ==============================================================================
  vim:tw=78:ts=8:ft=help:norl:
