@@ -1,0 +1,168 @@
+-- allium: 3
+-- Behavioural spec for review.nvim's review-authoring workflow: the
+-- interactive layer built on top of specs/review-storage.allium, which
+-- defines ReviewSession, Comment and the AuthorSubmitsComment /
+-- AuthorTargetsLocation / CommentSelected triggers this spec delegates to.
+-- This spec does not redeclare storage's entities or re-derive its
+-- creation/mutation semantics -- each rule below shapes a reviewer-facing
+-- action into one of storage's existing triggers.
+
+-- Scope: opening a review against a diff (working tree, a single commit,
+-- or an explicit revision range), resolving which existing comment a
+-- cursor-relative edit/delete targets, exporting/closing a session's
+-- comments.
+-- Excludes:
+--   - Storage/persistence guarantees (specs/review-storage.allium)
+--   - Key binding assignment and popup widget rendering (pure UI:
+--     config.lua's keymaps table, popup.lua, keymaps.lua's help screen)
+--   - Commit picker list UI (picker.lua)
+--   - Syntax highlighting and buffer-option setup (hooks.lua)
+--   - Sign/virtual-text rendering mechanics (marks.lua), beyond the
+--     file-comment vs. line-comment distinction they encode
+
+use "./review-storage.allium" as storage
+
+-- A reviewer opening a single commit reviews it against that commit's
+-- first parent, not the working tree or an unspecified base -- this is
+-- the default disambiguation when only one revision is given
+-- (init.lua's open_commits).
+rule OpeningReviewOfSingleCommit {
+    when: AuthorOpensReviewOfCommit(author, session, revision)
+
+    ensures: DiffViewRequested(session, from: first_parent(revision), to: revision)
+}
+
+rule OpeningReviewOfRevisionRange {
+    when: AuthorOpensReviewOfRange(author, session, from_revision, to_revision)
+
+    ensures: DiffViewRequested(session, from: from_revision, to: to_revision)
+}
+
+rule OpeningReviewOfWorkingTree {
+    when: AuthorOpensReviewOfWorkingTree(author, session)
+
+    ensures: DiffViewRequested(session, from: null, to: null)
+}
+
+-- Placing a comment at the cursor, over a visual selection, or as a
+-- file-level annotation are three distinct reviewer actions that all
+-- resolve to the same storage-level submission -- only how the target is
+-- shaped differs (specs/review-storage.allium's IndependentWritersDoNotCollide
+-- owns what happens once submitted).
+rule PlacingCommentAtCursor {
+    when: AuthorPlacesCommentAtCursor(author, session, file, line, side, comment_type, content)
+
+    ensures: storage/AuthorSubmitsComment(
+        session,
+        author,
+        { scope: line, file_path: file, line_start: line, line_end: null, side: side, comment_type: comment_type, content: content }
+    )
+}
+
+rule PlacingCommentForSelection {
+    when: AuthorPlacesCommentForSelection(author, session, file, selection_start, selection_end, side, comment_type, content)
+
+    let ordered_start = min(selection_start, selection_end)
+    let ordered_end = max(selection_start, selection_end)
+
+    ensures: storage/AuthorSubmitsComment(
+        session,
+        author,
+        { scope: line, file_path: file, line_start: ordered_start, line_end: ordered_end, side: side, comment_type: comment_type, content: content }
+    )
+}
+
+-- Unlike line comments, a file only ever has one file-level comment at a
+-- time: a second "file comment" action on a file that already has one
+-- edits the existing comment instead of creating a second (comments.lua's
+-- file_comment()).
+rule PlacingFileComment {
+    when: AuthorPlacesFileComment(author, session, file, comment_type, content)
+    requires: not exists storage/Comment{session: session, file_path: file, scope: file, author: author}
+
+    ensures: storage/AuthorSubmitsComment(
+        session,
+        author,
+        { scope: file, file_path: file, line_start: null, line_end: null, side: null, comment_type: comment_type, content: content }
+    )
+}
+
+-- A file-level comment renders anchored above the first line of a file's
+-- diff (marks.lua), so a reviewer invoking an edit/delete action while on
+-- that first line targets the file-level comment in preference to
+-- storage's general same-line disambiguation
+-- (specs/review-storage.allium's SelectingAmbiguousComment).
+rule ResolvingCommentAtCursor {
+    when: AuthorInvokesCommentAtCursor(author, session, file, line)
+
+    let file_comment = storage/Comment{session: session, file_path: file, scope: file, author: author}
+
+    ensures:
+        if line = first_line and exists file_comment:
+            storage/CommentSelected(author, file_comment)
+        else:
+            storage/AuthorTargetsLocation(author, file, line)
+}
+
+-- Closing a review is an implicit export: unlike the explicit export
+-- actions below, the reviewer takes no separate action to get their
+-- accumulated comments out of the editor before the session's diff view
+-- goes away.
+rule ClosingReviewExportsPendingComments {
+    when: AuthorClosesReview(author, session)
+    requires: session.comments.count > 0
+
+    ensures: ClipboardPopulatedWithReviewComments(session)
+}
+
+-- Every export destination renders the same comment set through the same
+-- Markdown formatting rules -- they differ only in where the result goes,
+-- not in what it contains (export.lua's generate_markdown is shared by
+-- all three).
+rule ExportingToClipboard {
+    when: AuthorExportsToClipboard(author, session)
+    requires: session.comments.count > 0
+
+    ensures: ClipboardPopulatedWithReviewComments(session)
+}
+
+rule PreviewingComments {
+    when: AuthorPreviewsComments(author, session)
+
+    ensures: PreviewShown(session)
+}
+
+rule SendingCommentsToSidekick {
+    when: AuthorSendsCommentsToSidekick(author, session)
+    requires: session.comments.count > 0
+
+    ensures: SidekickMessageSent(session)
+}
+
+-- While a review session is open, a comment submitted by any other
+-- writer -- a concurrent agent or another reviewer's own session, per
+-- storage's IndependentWritersDoNotCollide -- becomes visible in this
+-- session's diff view within a bounded delay, without a manual refresh
+-- action (hooks.lua's background sync poll).
+config {
+    live_sync_interval: Duration = 3.seconds
+}
+
+surface ReviewWorkflow {
+    facing author: storage/Author
+
+    provides:
+        AuthorOpensReviewOfCommit(author, session, revision)
+        AuthorOpensReviewOfRange(author, session, from_revision, to_revision)
+        AuthorOpensReviewOfWorkingTree(author, session)
+        AuthorPlacesCommentAtCursor(author, session, file, line, side, comment_type, content)
+        AuthorPlacesCommentForSelection(author, session, file, selection_start, selection_end, side, comment_type, content)
+        AuthorPlacesFileComment(author, session, file, comment_type, content)
+        AuthorInvokesCommentAtCursor(author, session, file, line)
+        AuthorClosesReview(author, session)
+        AuthorExportsToClipboard(author, session)
+        AuthorPreviewsComments(author, session)
+        AuthorSendsCommentsToSidekick(author, session)
+}
+
+open question "comments.lua's file_comment() looks up the file's existing file-level comment by file_path alone, not by (file_path, author) -- so PlacingFileComment's precondition above (one file-level comment per author per file, mirroring storage's IndependentWritersDoNotCollide guarantee applying uniformly across all comment scopes) does not match current behaviour, which allows at most one file-level comment per file total, shared and silently re-targeted for editing across authors regardless of who created it. Confirm which is intended before treating either as the spec of record -- see the weed pass for the corresponding code reference and the divergence this creates against IndependentWritersDoNotCollide's NoClobber guarantee."

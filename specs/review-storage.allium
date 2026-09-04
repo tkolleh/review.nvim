@@ -1,0 +1,253 @@
+-- allium: 3
+-- Behavioural spec for review.nvim's storage backend migration
+-- (flat per-branch JSON file -> queryable, multi-writer-safe storage).
+-- Source material: docs/research/duckdb-storage-backend.md,
+-- docs/research/agent-comment-authoring.md,
+-- docs/research/duckdb-ffi-vs-cli.md.
+-- Implementation-agnostic: does not mandate DuckDB, SQL, or any schema.
+-- Confirmed out-of-band (not itself a spec concern): every writer holds a
+-- storage connection only for the duration of a single mutation/read, then
+-- releases it. The guarantees below hold regardless of which mechanism a
+-- writer uses to honor that discipline -- see CommentAuthor surface's
+-- @guidance for the chosen mechanism and why. `duckdb` becomes a manual
+-- external prerequisite, same tier as this plugin's existing
+-- codediff.nvim/nui.nvim/plenary.nvim dependencies -- no bundling or
+-- auto-install is in scope.
+
+entity ReviewSession {
+    project_root: String
+    scope: Branch | RevisionRange
+    created_at: Timestamp
+    updated_at: Timestamp
+
+    comments: Comment with session = this
+    review_comments: comments where scope = review
+    file_comments: comments where scope = file
+    line_comments: comments where scope = line
+}
+
+variant Branch : ReviewSession {
+    branch_name: String
+}
+
+variant RevisionRange : ReviewSession {
+    rev1: String
+    rev2: String
+}
+
+entity Comment {
+    session: ReviewSession
+    scope: review | file | line
+    file_path: String when scope = file | line
+    line_start: Integer when scope = line
+    line_end: Integer when scope = line
+    side: old | new when scope = line
+    comment_type: note | suggestion | issue | praise
+    content: String
+    author: String
+    lifecycle_state: submitted | resolved
+    created_at: Timestamp
+    updated_at: Timestamp
+}
+
+invariant CommentScopeFieldsMatch {
+    for c in Comment:
+        (c.scope = review implies c.file_path = null and c.line_start = null)
+        and (c.scope = file implies c.file_path != null and c.line_start = null)
+        and (c.scope = line implies c.file_path != null and c.line_start != null)
+}
+
+invariant LineRangeOrdered {
+    for c in Comment:
+        c.line_end != null implies c.line_end >= c.line_start
+}
+
+-- Multiple authors may independently comment on the same file/line without
+-- collision, blocking, or overwriting one another. This is the behavioural
+-- core of the migration (agent-comment-authoring.md SS1 "multi-writer race";
+-- duckdb-storage-backend.md SS2a).
+rule IndependentWritersDoNotCollide {
+    when: AuthorSubmitsComment(session, author, target)
+    ensures:
+        Comment.created(
+            session: session,
+            author: author,
+            scope: target.scope,
+            file_path: target.file_path,
+            line_start: target.line_start,
+            line_end: target.line_end,
+            side: target.side,
+            comment_type: target.comment_type,
+            content: target.content,
+            lifecycle_state: submitted
+        )
+    @guarantee NoClobber
+        -- A comment submitted by one author never overwrites, merges with,
+        -- or prevents storage of a comment already present at the same
+        -- file/line from a different author or a different prior submission.
+    @guarantee NoSilentDataLoss
+        -- If two authors submit comments to the same session at
+        -- overlapping times, both submissions are durably recorded.
+        -- Neither a whole-session overwrite nor a partial write may cause
+        -- one author's comment to vanish because another author wrote
+        -- around the same time. The prior JSON-file design violated this
+        -- guarantee by design (unconditional whole-table overwrite on every
+        -- mutation).
+    @guidance
+        -- Resolution when two submissions contend for storage access at the
+        -- same instant: retry the losing submission automatically, up to
+        -- config.write_contention_max_retries times with
+        -- config.write_contention_backoff between attempts, before
+        -- surfacing an error to that submission's caller. This is safe
+        -- because two *new* comments never conflict semantically (see
+        -- CommentModificationsDoNotRace below for the one case where a
+        -- retry is not sufficient).
+}
+
+-- Two authors independently submitting NEW comments never conflict, even at
+-- the same file/line (IndependentWritersDoNotCollide above): each is a
+-- distinct comment. The one case where a real collision is possible is two
+-- authors modifying or removing the SAME existing comment at overlapping
+-- times -- unlike storage-access contention, retrying blindly would let a
+-- stale edit silently clobber whatever the other writer already did.
+rule CommentModificationsDoNotRace {
+    when: AuthorEditsComment(comment, expected_prior_content, new_content, new_type)
+    requires: comment.content = expected_prior_content
+    ensures:
+        comment.content = new_content
+    ensures:
+        if new_type != null:
+            comment.comment_type = new_type
+    @guarantee RejectStaleModification
+        -- If comment.content no longer matches expected_prior_content --
+        -- because another author's edit or delete already landed since this
+        -- caller last read the comment -- the modification is rejected and
+        -- reported to the caller rather than retried or silently applied.
+        -- This is a semantic conflict, not a storage-access race, and is
+        -- never resolved by the automatic retry described above.
+}
+
+-- Same race as CommentModificationsDoNotRace, for deletion instead of edit:
+-- a delete targeting a comment already changed or removed by another writer
+-- since this caller last read it is a stale, rejected modification, not a
+-- silent no-op or a retryable operation.
+rule DeletingComment {
+    when: AuthorDeletesComment(comment, expected_prior_content)
+    requires: comment.content = expected_prior_content
+    ensures: not exists comment
+    @guarantee RejectStaleModification
+        -- Mirrors CommentModificationsDoNotRace's guarantee: a mismatch
+        -- between expected_prior_content and the comment's actual current
+        -- content is reported to the caller rather than deleting whatever
+        -- the comment has since become.
+}
+
+rule ResolvingComment {
+    when: AuthorResolvesComment(comment)
+    requires: comment.lifecycle_state = submitted
+    ensures: comment.lifecycle_state = resolved
+}
+
+-- Storage is scoped per branch or per explicit revision range so comments
+-- from unrelated reviews never leak into each other (project CLAUDE.md;
+-- agent-comment-authoring.md SS1). Enforced at the read boundary: see
+-- CommentAuthor surface's `context session:` scoping below.
+invariant SessionScopeIsolatesComments {
+    for c in Comment:
+        c.session != null
+}
+
+-- Sessions expire after a retention window with no read/write activity,
+-- matching the current 7-day TTL (storage.lua EXPIRY_SECONDS).
+rule ExpiredSessionsAreRemoved {
+    when: session: ReviewSession.updated_at <= now - config.session_retention
+    ensures: not exists session
+    ensures:
+        for c in session.comments:
+            not exists c
+}
+
+config {
+    session_retention: Duration = 7.days
+    write_contention_max_retries: Integer = 3
+    write_contention_backoff: Duration = 50.milliseconds
+}
+
+-- Resolves which comment an ambiguous "the comment at this file/line"
+-- intent refers to, when more than one comment exists there. Used as a
+-- precondition by AuthorEditsComment/AuthorDeletesComment in the surface
+-- below: the writer's own comment at that location is targeted
+-- automatically when there is exactly one; otherwise the writer must supply
+-- an explicit comment reference rather than a bare file/line location.
+rule SelectingAmbiguousComment {
+    when: AuthorTargetsLocation(writer, file_path, line_start)
+    let candidates = Comment where file_path = file_path and line_start = line_start
+    let own = candidates where author = writer
+    ensures:
+        if own.count = 1:
+            CommentSelected(writer, own)
+        else:
+            ExplicitCommentReferenceRequired(writer, candidates)
+}
+
+surface CommentAuthor {
+    facing writer: Author
+
+    context session: ReviewSession
+
+    exposes:
+        session.review_comments
+        session.file_comments
+        session.line_comments
+
+    provides:
+        AuthorSubmitsComment(writer, target)
+        AuthorTargetsLocation(writer, file_path, line_start)
+        AuthorEditsComment(comment, expected_prior_content, new_content, new_type)
+            when comment.author = writer
+        AuthorDeletesComment(comment, expected_prior_content)
+            when comment.author = writer
+        AuthorResolvesComment(comment)
+
+    @guarantee ReadYourWrites
+        -- A comment successfully submitted by writer is immediately visible
+        -- to that same writer's next read of the session, regardless of
+        -- what other writers submitted concurrently.
+
+    @guarantee OptionalFieldsPersistAsAbsent
+        -- A Comment field left unset at submission (e.g. line_end for a
+        -- single-line comment) is read back as absent by every subsequent
+        -- reader, in this or any other process -- never as a placeholder,
+        -- sentinel, or other non-absent value.
+
+    @guidance
+        -- Decided: every writer -- review.nvim's own Lua code included, not
+        -- just external agents -- interacts with storage exclusively via
+        -- short-lived `duckdb <file> -c "..."` CLI subprocess calls (e.g.
+        -- Neovim's `vim.system`), never an embedded libduckdb connection via
+        -- LuaJIT FFI. Rationale (docs/research/duckdb-ffi-vs-cli.md SS5): an
+        -- in-process FFI fault has no process boundary -- LuaJIT's own docs
+        -- state a misdeclared or buggy FFI call "might crash" the host
+        -- process, and a blocking call cannot be interrupted from Neovim's
+        -- single-threaded Lua. A CLI subprocess fault is isolated to the
+        -- child process, and Neovim's `vim.system` already provides a
+        -- documented `timeout`/`kill()` mechanism to bound and recover from
+        -- a hung or crashed invocation. This also keeps review.nvim's own
+        -- writes and an external agent's writes on one shared mechanism,
+        -- rather than two different concurrency/error-handling models
+        -- coexisting against the same lock file. Revisit only if a measured
+        -- (not assumed) performance problem justifies re-accepting the
+        -- crash-isolation trade-off FFI would reintroduce.
+}
+
+actor Author {
+    identified_by: name
+    name: String
+}
+
+-- Resolved: disambiguation is author-match-first (SelectingAmbiguousComment
+-- above), then explicit reference; retry policy is bounded auto-retry on
+-- storage-access contention with reject-and-report on semantic conflicts
+-- (CommentModificationsDoNotRace, DeletingComment's guarantee).
+
+open question "Does session_retention (7 days) get reset by any read/write activity, or only by write activity, and does an in-progress live editor session prevent expiry even if updated_at is stale? Deliberately left open: out of scope for this migration, inherited as-is from storage.lua's current EXPIRY_SECONDS behavior."

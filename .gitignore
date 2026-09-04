@@ -2,3 +2,7 @@
 # checked-in, canonical agent context for this repo — un-ignore them here.
 !/CLAUDE.md
 !/AGENTS.md
+
+# *.allium is ignored globally (~/.config/git/ignore) but specs/*.allium are
+# checked-in, canonical behavioural specs for this repo — un-ignore them here.
+!/specs/*.allium
