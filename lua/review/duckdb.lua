@@ -44,7 +44,7 @@ function M.query(db_path, sql, opts, callback)
         return
       end
 
-      local ok, decoded = pcall(vim.json.decode, stdout)
+      local ok, decoded = pcall(vim.json.decode, stdout, { luanil = { object = true } })
       if not ok then
         callback(false, nil, "failed to decode duckdb JSON output: " .. stdout)
         return

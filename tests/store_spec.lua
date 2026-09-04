@@ -599,5 +599,41 @@ describe("review.store", function()
 
       assert.equals("edited elsewhere", store.get(c.id).text)
     end)
+
+    -- OptionalFieldsPersistAsAbsent (CommentAuthor surface): line_end is
+    -- NULL in storage for a single-line comment. vim.json.decode() without
+    -- the luanil option turns JSON `null` into vim.NIL, a userdata
+    -- sentinel -- reproduced here via a raw insert (another writer) rather
+    -- than store.add, since store.add's own cache-insert never round-trips
+    -- through JSON. marks.lua's `comment.line_end or comment.line` treats
+    -- any non-nil value (including vim.NIL) as present, so a leaked
+    -- sentinel crashes arithmetic downstream instead of falling back.
+    it("decodes a NULL line_end as nil, not a JSON-null sentinel", function()
+      -- Seeds the schema (review_comments table) the same way store.add
+      -- would, so the raw insert below lands in an existing table rather
+      -- than silently failing against a not-yet-bootstrapped db file.
+      add("seed.lua", 1, "note", "seed")
+
+      local path = require("review.storage").get_storage_path()
+      local insert_ok, _, insert_err = await(function(done)
+        duckdb.query(
+          path,
+          "INSERT INTO review_comments (comment_scope, file_path, line_start, side, comment_type, content, author) "
+            .. "VALUES ('line', 'lua/review/duckdb.lua', 47, 'new', 'note', 'reproduces vim.NIL line_end', 'other-agent') RETURNING id;",
+          nil,
+          done
+        )
+      end)
+      assert.is_true(insert_ok, insert_err)
+
+      await(function(done)
+        store.sync_from_storage(done)
+      end)
+
+      local comment = store.get_at_line("lua/review/duckdb.lua", 47)
+      assert.is_not_nil(comment)
+      assert.is_nil(comment.line_end)
+      assert.equals(47, comment.line_end or comment.line)
+    end)
   end)
 end)
