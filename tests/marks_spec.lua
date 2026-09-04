@@ -39,6 +39,17 @@ describe("comment box line wrapping", function()
     return extmarks[1][4].virt_lines
   end
 
+  -- A rendered line is `{ {text, hl}, {text, hl}, ... }` (border/content/border
+  -- may be separate highlighted chunks since author-color border rendering
+  -- was added) -- concatenate before measuring the line's true display width.
+  local function line_width(line)
+    local width = 0
+    for _, chunk in ipairs(line) do
+      width = width + vim.fn.strdisplaywidth(chunk[1])
+    end
+    return width
+  end
+
   it("wraps a long single line instead of growing the box past the window width", function()
     local long_text = "This is a long comment that should wrap across several lines "
       .. "instead of growing the box unbounded past the edge of the window"
@@ -75,9 +86,9 @@ describe("comment box line wrapping", function()
     marks.render_for_buffer(bufnr, "new", "test.lua")
 
     local virt_lines = box_virt_lines()
-    local first_width = vim.fn.strdisplaywidth(virt_lines[1][1][1])
+    local first_width = line_width(virt_lines[1])
     for _, line in ipairs(virt_lines) do
-      assert.equals(first_width, vim.fn.strdisplaywidth(line[1][1]))
+      assert.equals(first_width, line_width(line))
     end
   end)
 
@@ -89,7 +100,7 @@ describe("comment box line wrapping", function()
 
     local win_width = vim.api.nvim_win_get_width(win)
     for _, line in ipairs(box_virt_lines()) do
-      assert.is_true(vim.fn.strdisplaywidth(line[1][1]) <= win_width)
+      assert.is_true(line_width(line) <= win_width)
     end
   end)
 
