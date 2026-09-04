@@ -1,0 +1,4 @@
+# CLAUDE.md and AGENTS.md are ignored globally (~/.config/git/ignore) but are
+# checked-in, canonical agent context for this repo — un-ignore them here.
+!/CLAUDE.md
+!/AGENTS.md
