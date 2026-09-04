@@ -1,6 +1,6 @@
 *review.txt*  Code review annotations for codediff.nvim
 
-Author: George Guimarães (original), TJ Kolleh (fork maintainer)
+Author: TJ Kolleh
 License: Apache-2.0
 
 ==============================================================================

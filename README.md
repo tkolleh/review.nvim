@@ -4,7 +4,7 @@ Code review annotations for codediff.nvim, optimized for AI feedback loops.
 
 Inspired by [tuicr](https://github.com/agavra/tuicr).
 
-> **This is a hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim), diverged as of `v2.0.0`. The storage layer was rewritten from a flat per-branch JSON file to a DuckDB-backed, multi-writer-safe design, and the project's direction has shifted toward being a more general-purpose multi-author commenting tool rather than a single-reviewer annotation layer. Thanks to George Guimarães for the original project this builds on.
+> **This is a hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim), diverged as of `v2.0.0`. The storage layer was rewritten from a flat per-branch JSON file to a DuckDB-backed, multi-writer-safe design, and the project's direction has shifted toward being a more general-purpose multi-author commenting tool rather than a single-reviewer annotation layer.
 
 ## Features
 
@@ -216,11 +216,9 @@ Lines prefixed with `~` (e.g. `:~45`) refer to the old (left) side of the diff. 
 ## Running Tests
 
 ```bash
-make test
+just test
 ```
 
 ## License
-
-Copyright 2025 George Guimarães
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
