@@ -115,6 +115,33 @@ describe("comment alignment between panes", function()
       assert.equals(0, #mod_padding)
     end)
 
+    it("pads to match a wrapped comment's actual rendered height", function()
+      -- Attach mod_buf to a narrow window so its long comment wraps
+      -- deterministically; orig_buf stays unattached (falls back to the
+      -- default width, wide enough that nothing there wraps).
+      local win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(win, mod_buf)
+      vim.api.nvim_win_set_width(win, 30)
+
+      local long_text = "This is a long comment that should wrap across several lines "
+        .. "instead of growing the box unbounded past the edge of the window"
+      helpers.add(store, "test.lua", 3, "issue", long_text, nil, "new")
+
+      marks.render_for_buffer(orig_buf, "old", "test.lua")
+      marks.render_for_buffer(mod_buf, "new", "test.lua")
+      marks.align_buffers(orig_buf, mod_buf, "test.lua", "test.lua")
+
+      local ns_id = vim.api.nvim_create_namespace("review")
+      local comment_marks = vim.api.nvim_buf_get_extmarks(mod_buf, ns_id, 0, -1, { details = true })
+      assert.equals(1, #comment_marks)
+      local actual_box_height = #comment_marks[1][4].virt_lines
+      assert.is_true(actual_box_height > 3, "expected the long comment to actually wrap")
+
+      local orig_padding = vim.api.nvim_buf_get_extmarks(orig_buf, ns_padding, 0, -1, { details = true })
+      assert.equals(1, #orig_padding)
+      assert.equals(actual_box_height, #orig_padding[1][4].virt_lines)
+    end)
+
     it("handles comments on different lines independently", function()
       helpers.add(store, "test.lua", 3, "issue", "On new at 3", nil, "new")
       helpers.add(store, "test.lua", 7, "note", "On old at 7", nil, "old")

@@ -7,27 +7,99 @@ local normalize_path = require("review.utils").normalize_path
 local ns_id = vim.api.nvim_create_namespace("review")
 local ns_padding = vim.api.nvim_create_namespace("review_padding")
 
+local MIN_CONTENT_WIDTH = 20
+local DEFAULT_CONTENT_WIDTH = 60
+-- "│ " + " │" border/padding chars around the box's text column.
+local BOX_BORDER_OVERHEAD = 4
+
+---Greedily wrap text on whitespace so no rendered line exceeds max_width display
+---columns. A single word wider than max_width is hard-split by character rather
+---than left to overflow.
+---@param text string
+---@param max_width number
+---@return string[]
+local function wrap_line(text, max_width)
+  if vim.fn.strdisplaywidth(text) <= max_width then
+    return { text }
+  end
+
+  local lines = {}
+  local current = ""
+
+  local function flush()
+    if current ~= "" then
+      table.insert(lines, current)
+      current = ""
+    end
+  end
+
+  for word in text:gmatch("%S+") do
+    while vim.fn.strdisplaywidth(word) > max_width do
+      flush()
+      table.insert(lines, vim.fn.strcharpart(word, 0, max_width))
+      word = vim.fn.strcharpart(word, max_width)
+    end
+
+    local candidate = current == "" and word or (current .. " " .. word)
+    if vim.fn.strdisplaywidth(candidate) > max_width then
+      flush()
+      current = word
+    else
+      current = candidate
+    end
+  end
+  flush()
+
+  return lines
+end
+
+---Resolve the usable text width for boxes rendered against a buffer: the
+---width of a window currently displaying it, minus sign/number/fold columns
+---and the box's own border overhead. Falls back to a fixed default when the
+---buffer isn't shown in any window (e.g. a comment on a file not currently open).
+---@param bufnr number
+---@return number
+local function window_content_width(bufnr)
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid == -1 then
+    return DEFAULT_CONTENT_WIDTH
+  end
+
+  local info = vim.fn.getwininfo(winid)[1]
+  if not info then
+    return DEFAULT_CONTENT_WIDTH
+  end
+
+  return math.max(info.width - info.textoff - BOX_BORDER_OVERHEAD, MIN_CONTENT_WIDTH)
+end
+
 ---@param text string
 ---@param type_name string
 ---@param hl string
+---@param max_width number
 ---@return table[] virt_lines
-local function build_comment_box(text, type_name, hl)
+local function build_comment_box(text, type_name, hl, max_width)
   local virt_lines = {}
   local text_lines = vim.split(text, "\n")
 
-  local max_text_width = 0
+  local rendered_lines = {}
   for _, text_line in ipairs(text_lines) do
-    max_text_width = math.max(max_text_width, vim.fn.strdisplaywidth(text_line))
+    vim.list_extend(rendered_lines, wrap_line(text_line, max_width))
+  end
+
+  local max_text_width = 0
+  for _, rendered_line in ipairs(rendered_lines) do
+    max_text_width = math.max(max_text_width, vim.fn.strdisplaywidth(rendered_line))
   end
   local header_text = string.format("[%s]", string.upper(type_name))
-  local content_width = math.max(max_text_width, 20)
+  local content_width = math.max(max_text_width, MIN_CONTENT_WIDTH)
 
   local top_dashes = content_width - vim.fn.strdisplaywidth(header_text) + 1
   table.insert(virt_lines, { { "╭─" .. header_text .. string.rep("─", top_dashes) .. "╮", hl } })
 
-  for _, text_line in ipairs(text_lines) do
-    local padding = content_width - vim.fn.strdisplaywidth(text_line)
-    table.insert(virt_lines, { { "│ " .. text_line .. string.rep(" ", padding) .. " │", hl } })
+  for _, rendered_line in ipairs(rendered_lines) do
+    local padding = content_width - vim.fn.strdisplaywidth(rendered_line)
+    table.insert(virt_lines, { { "│ " .. rendered_line .. string.rep(" ", padding) .. " │", hl } })
   end
 
   table.insert(virt_lines, { { "╰" .. string.rep("─", content_width + 2) .. "╯", hl } })
@@ -70,6 +142,7 @@ function M.render_for_buffer(bufnr, side, file_override)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
   local cfg = config.get()
+  local max_width = window_content_width(bufnr)
 
   for _, comment in ipairs(comments) do
     local type_info = cfg.comment_types[comment.type]
@@ -77,7 +150,7 @@ function M.render_for_buffer(bufnr, side, file_override)
     local hl = type_info and type_info.hl or "ReviewSign"
     local line_hl = type_info and type_info.line_hl
     local name = type_info and type_info.name or comment.type
-    local virt_lines = build_comment_box(comment.text, name, hl)
+    local virt_lines = build_comment_box(comment.text, name, hl, max_width)
 
     if comment.line == 0 then
       pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, 0, 0, {
@@ -85,6 +158,7 @@ function M.render_for_buffer(bufnr, side, file_override)
         sign_hl_group = hl,
         virt_lines = virt_lines,
         virt_lines_above = true,
+        virt_lines_overflow = "scroll",
       })
       -- Scroll windows to reveal virt_lines above row 0
       local virt_line_count = #virt_lines
@@ -122,6 +196,7 @@ function M.render_for_buffer(bufnr, side, file_override)
             line_hl_group = line_hl,
             virt_lines = virt_lines,
             virt_lines_above = false,
+            virt_lines_overflow = "scroll",
           })
         else
           pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line_start, 0, {
@@ -130,6 +205,7 @@ function M.render_for_buffer(bufnr, side, file_override)
             line_hl_group = line_hl,
             virt_lines = virt_lines,
             virt_lines_above = false,
+            virt_lines_overflow = "scroll",
           })
         end
       end
@@ -139,10 +215,15 @@ end
 
 ---Calculate the height of a comment's virtual line box
 ---@param comment table
+---@param max_width number
 ---@return number height, number attach_line (0-indexed)
-local function comment_box_height(comment)
+local function comment_box_height(comment, max_width)
   local text_lines = vim.split(comment.text, "\n")
-  local height = #text_lines + 2 -- top border + content + bottom border
+  local rendered_line_count = 0
+  for _, text_line in ipairs(text_lines) do
+    rendered_line_count = rendered_line_count + #wrap_line(text_line, max_width)
+  end
+  local height = rendered_line_count + 2 -- top border + content + bottom border
   local attach_line
   if comment.line == 0 then
     attach_line = 0
@@ -174,20 +255,21 @@ function M.align_buffers(orig_buf, mod_buf, orig_file, mod_file)
 
   -- Build height maps: attach_line -> total virt_line height per side
   -- Skip file comments (line 0) since they render identically on both sides
-  local function build_height_map(file, side)
+  local function build_height_map(bufnr, file, side)
     if not file then return {} end
+    local max_width = window_content_width(bufnr)
     local map = {}
     for _, comment in ipairs(store.get_for_file(file, side)) do
       if comment.line ~= 0 and (comment.side or "new") == side then
-        local height, attach_line = comment_box_height(comment)
+        local height, attach_line = comment_box_height(comment, max_width)
         map[attach_line] = (map[attach_line] or 0) + height
       end
     end
     return map
   end
 
-  local old_map = build_height_map(orig_file, "old")
-  local new_map = build_height_map(mod_file, "new")
+  local old_map = build_height_map(orig_buf, orig_file, "old")
+  local new_map = build_height_map(mod_buf, mod_file, "new")
 
   local all_lines = {}
   for line in pairs(old_map) do all_lines[line] = true end

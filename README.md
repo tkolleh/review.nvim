@@ -19,7 +19,7 @@ Inspired by [tuicr](https://github.com/agavra/tuicr).
 
 ## Requirements
 
-- Neovim >= 0.9
+- Neovim >= 0.11
 - [codediff.nvim](https://github.com/esmuellert/codediff.nvim)
 - [nui.nvim](https://github.com/MunifTanjim/nui.nvim)
 - [`duckdb`](https://duckdb.org) CLI on your `$PATH` (used for comment storage)

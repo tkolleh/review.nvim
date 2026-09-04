@@ -26,7 +26,7 @@ full feature list and workflow: https://github.com/tkolleh/review.nvim
 ==============================================================================
 2. REQUIREMENTS                                          *review-requirements*
 
-- Neovim >= 0.9
+- Neovim >= 0.11
 - codediff.nvim (https://github.com/esmuellert/codediff.nvim)
 - nui.nvim (https://github.com/MunifTanjim/nui.nvim)
 - `duckdb` CLI on your $PATH (https://duckdb.org), used for comment storage
