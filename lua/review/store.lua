@@ -237,11 +237,16 @@ function M.get_for_file(file, side)
 end
 
 ---@param file string
+---@param author? string When given, only a file comment by this author matches
+---(specs/review-storage.allium's IndependentWritersDoNotCollide guarantee
+---applies per-author to file-scoped comments same as line-scoped ones —
+---without this filter, one author's "add file comment" could silently
+---edit another author's file comment instead of creating their own).
 ---@return Comment|nil
-function M.get_file_comment(file)
+function M.get_file_comment(file, author)
   local comments = M.comments[file] or {}
   for _, comment in ipairs(comments) do
-    if comment.line == 0 then
+    if comment.line == 0 and (not author or comment.author == author) then
       return comment
     end
   end

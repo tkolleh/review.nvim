@@ -50,7 +50,7 @@ function M.file_comment(initial_type)
     return
   end
 
-  local existing = store.get_file_comment(file)
+  local existing = store.get_file_comment(file, current_user())
   if existing then
     popup.open(existing.type, existing.text, function(new_type, text)
       if new_type and text then
@@ -111,7 +111,7 @@ end
 ---@param callback fun(comment: Comment)
 local function resolve_target_comment(file, line, callback)
   if line == 1 then
-    local file_comment = store.get_file_comment(file)
+    local file_comment = store.get_file_comment(file, current_user())
     if file_comment then
       callback(file_comment)
       return

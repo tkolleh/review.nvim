@@ -83,6 +83,22 @@ describe("file-level comments", function()
       assert.is_not_nil(store.get_file_comment("file.lua"))
       assert.is_not_nil(store.get_at_line("file.lua", 10))
     end)
+
+    -- IndependentWritersDoNotCollide (specs/review-storage.allium) applies
+    -- per-author to file-scoped comments the same as line-scoped ones: two
+    -- authors can each have their own file comment without one clobbering
+    -- the other.
+    it("get_file_comment filters by author when given", function()
+      helpers.add(store, "file.lua", 0, "note", "Alice's note", nil, nil, "alice")
+      helpers.add(store, "file.lua", 0, "issue", "Bob's issue", nil, nil, "bob")
+
+      local alice_comment = store.get_file_comment("file.lua", "alice")
+      local bob_comment = store.get_file_comment("file.lua", "bob")
+
+      assert.equals("Alice's note", alice_comment.text)
+      assert.equals("Bob's issue", bob_comment.text)
+      assert.is_nil(store.get_file_comment("file.lua", "carol"))
+    end)
   end)
 
   describe("marks rendering", function()
