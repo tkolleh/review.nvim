@@ -12,7 +12,7 @@ compatibility: "duckdb CLI, python3, git"
 metadata:
   audience: developers
   domain: code-review
-  version: "1.1.0"
+  version: "2026.1"
   tools: "duckdb, python3, main.py"
 ---
 
