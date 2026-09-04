@@ -20,7 +20,8 @@ jobs:
 
       - name: Install plenary.nvim
         run: |
-          git clone --depth 1 https://github.com/nvim-lua/plenary.nvim ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
+          git clone https://github.com/nvim-lua/plenary.nvim ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim
+          git -C ~/.local/share/nvim/site/pack/vendor/start/plenary.nvim checkout 74b06c6c75e4eeb3108ec01852001636d85a932b
 
       - name: Install DuckDB CLI
         run: |
