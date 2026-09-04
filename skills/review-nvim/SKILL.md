@@ -12,7 +12,7 @@ compatibility: "duckdb CLI, python3, git"
 metadata:
   audience: developers
   domain: code-review
-  version: "1.0.0"
+  version: "1.1.0"
   tools: "duckdb, python3, main.py"
 ---
 
@@ -87,7 +87,10 @@ don't scrape stderr or a traceback.
 
 - `read` → `{"status": "success", "comments": [...]}` — the raw `review_comments` rows
   (field names: `id`, `comment_scope`, `file_path`, `line_start`, `line_end`, `side`,
-  `comment_type`, `content`, `author`, `lifecycle_state`, `created_at`, `updated_at`).
+  `comment_type`, `content`, `author`, `color_dark`, `color_light`, `lifecycle_state`,
+  `created_at`, `updated_at`). `color_dark`/`color_light` are hex strings DuckDB derives
+  deterministically from `author` (same author always yields the same colors) — informational
+  only, not something `add` accepts as an argument.
 - `add` → `{"status": "success", "id": ..., "created_at": ...}`.
 - Any failure (not in a git repo, `duckdb` not installed, a query error) →
   `{"status": "error", "reason": "...", "stage": "read"|"add"}`, and the process exits
