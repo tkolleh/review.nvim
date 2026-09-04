@@ -62,8 +62,8 @@ release (see Gotchas below).
 ## Common Commands
 | Command | Purpose |
 |---------|---------|
-| `make test` | Run the full plenary test suite headlessly (`tests/minimal_init.lua`) |
-| `make test-file FILE=tests/store_spec.lua` | Run a single spec file |
+| `just test` | Run the full plenary test suite headlessly (`tests/minimal_init.lua`) |
+| `just test-file tests/store_spec.lua` | Run a single spec file |
 
 There is no configured linter or formatter in this repo (no `.stylua.toml`/`.luacheckrc`) —
 match the existing style in the file you're editing.
@@ -105,7 +105,7 @@ match the existing style in the file you're editing.
 1. Make your change in the relevant `lua/review/*.lua` module.
 2. Add/update a spec in `tests/` (one file per concern, following existing naming like
    `*_spec.lua`).
-3. Run `make test` (or `make test-file FILE=tests/<name>_spec.lua` while iterating).
+3. Run `just test` (or `just test-file tests/<name>_spec.lua` while iterating).
 4. Update `README.md` (and `doc/review.txt` if user-facing commands/keymaps changed).
 5. Keep diffs small and focused; do not commit secrets or credentials.
 
