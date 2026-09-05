@@ -2,9 +2,11 @@
 
 Code review annotations for codediff.nvim, optimized for AI feedback loops.
 
-Inspired by [tuicr](https://github.com/agavra/tuicr).
-
 > **This is a hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim), diverged as of `v2.0.0`. The storage layer was rewritten from a flat per-branch JSON file to a DuckDB-backed, multi-writer-safe design, and the project's direction has shifted toward being a more general-purpose multi-author commenting tool rather than a single-reviewer annotation layer.
+
+## Scope
+
+review.nvim reviews local diffs (working tree, commits, revision ranges) — it does not integrate with GitHub/GitLab pull or merge requests. For reviewing and commenting on PRs/MRs from within Neovim, see [octo.nvim](https://github.com/pwntester/octo.nvim).
 
 ## Features
 
@@ -228,3 +230,7 @@ just test
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+
+## 🌟 Credits
+
+The PR review panel is heavily inspired by [tuicr](https://github.com/agavra/tuicr).
