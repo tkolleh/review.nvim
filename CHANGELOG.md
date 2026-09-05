@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.1](https://github.com/tkolleh/review.nvim/compare/v3.0.0...v3.0.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **hooks:** restore buffer editability when a review session closes ([4946ed2](https://github.com/tkolleh/review.nvim/commit/4946ed23efa887c1b5e3e5bc956ed58a63b5cb60))
+
+
+### Documentation
+
+* **readme:** scope out PR review integration, move credits to own section ([41af191](https://github.com/tkolleh/review.nvim/commit/41af19179767bea184431668e1b6461a6681c562))
+
 ## [3.0.0](https://github.com/tkolleh/review.nvim/compare/v2.0.0...v3.0.0) (2026-09-04)
 
 
