@@ -15,6 +15,17 @@ local buf_augroup = nil
 ---(e.g. an agent's) concurrent comments while a review session is open
 local sync_timer = nil
 
+---@class ReviewEditability
+---@field modifiable boolean
+---@field readonly boolean
+
+---@type table<number, ReviewEditability> Editability each locked buffer had
+---before this session locked it, keyed by bufnr. codediff renders the modified
+---side of a diff in the working tree file's own buffer, and modifiable/readonly
+---are buffer-scoped, so a lock we never release follows that buffer into
+---unrelated editing (georgeguimaraes/review.nvim#38).
+local prior_editability = {}
+
 local SYNC_POLL_INTERVAL_MS = 3000
 
 local function start_sync_timer()
@@ -38,6 +49,38 @@ local function stop_sync_timer()
   sync_timer:stop()
   sync_timer:close()
   sync_timer = nil
+end
+
+---Lock a buffer against edits, recording what it displaced.
+---Recorded once per buffer: codediff re-emits its file-selected event for a
+---buffer we already locked, and re-recording would capture our own lock as
+---though it were the reviewer's prior state.
+---@param bufnr number|nil
+local function lock_buffer(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if not prior_editability[bufnr] then
+    prior_editability[bufnr] = {
+      modifiable = vim.bo[bufnr].modifiable,
+      readonly = vim.bo[bufnr].readonly,
+    }
+  end
+  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].readonly = true
+end
+
+---Restore every buffer this session locked to the editability it had before.
+---Restoring is not the same as making editable -- a diff's original side is a
+---synthetic buffer that was already non-modifiable.
+local function release_buffers()
+  for bufnr, prior in pairs(prior_editability) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      vim.bo[bufnr].modifiable = prior.modifiable
+      vim.bo[bufnr].readonly = prior.readonly
+    end
+  end
+  prior_editability = {}
 end
 
 ---Set syntax highlighting for a buffer based on file path.
@@ -229,14 +272,8 @@ function M.on_session_created(tabpage)
 
   local cfg = config.get()
   if cfg.codediff.readonly then
-    if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
-      vim.api.nvim_set_option_value("modifiable", false, { buf = orig_buf })
-      vim.api.nvim_set_option_value("readonly", true, { buf = orig_buf })
-    end
-    if mod_buf and vim.api.nvim_buf_is_valid(mod_buf) then
-      vim.api.nvim_set_option_value("modifiable", false, { buf = mod_buf })
-      vim.api.nvim_set_option_value("readonly", true, { buf = mod_buf })
-    end
+    lock_buffer(orig_buf)
+    lock_buffer(mod_buf)
   end
 
   if buf_augroup then
@@ -290,6 +327,7 @@ end
 function M.on_session_closed()
   current_tabpage = nil
   stop_sync_timer()
+  release_buffers()
   if buf_augroup then
     pcall(vim.api.nvim_del_augroup_by_id, buf_augroup)
     buf_augroup = nil
@@ -313,14 +351,8 @@ function M.on_file_changed(tabpage)
 
   local cfg = config.get()
   if cfg.codediff.readonly then
-    if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
-      vim.api.nvim_set_option_value("modifiable", false, { buf = orig_buf })
-      vim.api.nvim_set_option_value("readonly", true, { buf = orig_buf })
-    end
-    if mod_buf and vim.api.nvim_buf_is_valid(mod_buf) then
-      vim.api.nvim_set_option_value("modifiable", false, { buf = mod_buf })
-      vim.api.nvim_set_option_value("readonly", true, { buf = mod_buf })
-    end
+    lock_buffer(orig_buf)
+    lock_buffer(mod_buf)
   end
 
   vim.defer_fn(function()

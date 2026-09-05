@@ -129,6 +129,10 @@ codediff.readonly ~
     keymaps are active (e.g. `i` to add comment). When false, leader-based
     keymaps are used instead. Toggle at runtime with `R`.
 
+    Closing the review restores each buffer's `modifiable` and `readonly`
+    to the values it had before the review locked it, so a working tree
+    buffer reused in normal editing afterwards is editable again.
+
 ==============================================================================
 5. KEYMAPS                                                   *review-keymaps*
 

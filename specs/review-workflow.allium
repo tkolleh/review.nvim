@@ -16,7 +16,7 @@
 --   - Key binding assignment and popup widget rendering (pure UI:
 --     config.lua's keymaps table, popup.lua, keymaps.lua's help screen)
 --   - Commit picker list UI (picker.lua)
---   - Syntax highlighting and buffer-option setup (hooks.lua)
+--   - Syntax highlighting and treesitter attachment (hooks.lua)
 --   - Sign/virtual-text rendering mechanics (marks.lua), beyond the
 --     file-comment vs. line-comment distinction they encode
 
@@ -139,6 +139,75 @@ rule SendingCommentsToSidekick {
     ensures: SidekickMessageSent(session)
 }
 
+-- A review session locks the diff buffers it is shown in so a reviewer
+-- cannot accidentally type into the code under review. Those buffers are
+-- not the session's to own: codediff.nvim renders the modified side of a
+-- diff in the working tree file's own buffer, and `modifiable`/`readonly`
+-- are buffer-scoped in Neovim, so a lock the session never releases
+-- follows that buffer into unrelated editing after the review is gone
+-- (upstream georgeguimaraes/review.nvim#38).
+entity DiffBuffer {
+    session: storage/ReviewSession
+    locked: Boolean
+    prior_editability: Editability?  when locked = true
+}
+
+value Editability {
+    modifiable: Boolean
+    readonly: Boolean
+}
+
+-- The lock records what it displaced before displacing it, and records it
+-- only once: a session revisits the same buffer whenever codediff re-emits
+-- its file-selected event, and a second recording would capture the
+-- session's own lock as though it were the reviewer's prior state.
+rule LockingDiffBuffer {
+    when: buffer: DiffBuffer.session becomes session
+    requires: config.lock_diff_buffers and not buffer.locked
+
+    ensures: buffer.prior_editability = { modifiable: buffer.modifiable, readonly: buffer.readonly }
+    ensures: buffer.locked = true
+    ensures: buffer.modifiable = false
+    ensures: buffer.readonly = true
+}
+
+-- Every buffer the session locked is released together when the session
+-- ends, not only the pair on screen at the time -- a review that visited
+-- several files locked several pairs, and all of them outlive the session.
+rule ReleasingDiffBuffersOnClose {
+    when: AuthorClosesReview(author, session)
+
+    for buffer in DiffBuffers where session = session and locked = true:
+        ensures: buffer.modifiable = buffer.prior_editability.modifiable
+        ensures: buffer.readonly = buffer.prior_editability.readonly
+        ensures: buffer.locked = false
+
+    @guarantee NoEditabilityLeak
+        -- A buffer's modifiable and readonly values after a review session
+        -- closes equal the values it had before that session locked it, for
+        -- every buffer the session locked -- whatever the reviewer did in
+        -- between, and regardless of whether the buffer was editable to
+        -- begin with. Restoring is not the same as making editable: the
+        -- original side of a diff is a synthetic buffer that was already
+        -- non-modifiable, and forcing it editable on close is as wrong as
+        -- leaving the working tree buffer locked.
+}
+
+-- Switching between readonly and edit mode is a live reviewer affordance,
+-- not a handover of the buffer: it changes what the reviewer can type in
+-- the diff on screen right now, and leaves untouched what closing the
+-- session will restore. It reaches only the pair currently displayed, so a
+-- file the session visited earlier stays locked until close releases it.
+rule TogglingEditMode {
+    when: AuthorTogglesEditMode(author, session)
+    let on_screen = DiffBuffers where session = session and locked = true and shown_in(session)
+
+    for buffer in on_screen:
+        ensures: buffer.modifiable = not config.lock_diff_buffers
+        ensures: buffer.readonly = config.lock_diff_buffers
+        ensures: buffer.prior_editability = buffer.prior_editability
+}
+
 -- While a review session is open, a comment submitted by any other
 -- writer -- a concurrent agent or another reviewer's own session, per
 -- storage's IndependentWritersDoNotCollide -- becomes visible in this
@@ -146,6 +215,7 @@ rule SendingCommentsToSidekick {
 -- action (hooks.lua's background sync poll).
 config {
     live_sync_interval: Duration = 3.seconds
+    lock_diff_buffers: Boolean = true
 }
 
 surface ReviewWorkflow {
@@ -163,6 +233,7 @@ surface ReviewWorkflow {
         AuthorExportsToClipboard(author, session)
         AuthorPreviewsComments(author, session)
         AuthorSendsCommentsToSidekick(author, session)
+        AuthorTogglesEditMode(author, session)
 }
 
 open question "comments.lua's file_comment() looks up the file's existing file-level comment by file_path alone, not by (file_path, author) -- so PlacingFileComment's precondition above (one file-level comment per author per file, mirroring storage's IndependentWritersDoNotCollide guarantee applying uniformly across all comment scopes) does not match current behaviour, which allows at most one file-level comment per file total, shared and silently re-targeted for editing across authors regardless of who created it. Confirm which is intended before treating either as the spec of record -- see the weed pass for the corresponding code reference and the divergence this creates against IndependentWritersDoNotCollide's NoClobber guarantee."
