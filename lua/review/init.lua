@@ -164,6 +164,11 @@ function M.open_commits(rev1, rev2)
 end
 
 function M.close()
+  if not hooks.get_current_tabpage() then
+    vim.notify("No active review session", vim.log.levels.WARN, { title = "review.nvim" })
+    return
+  end
+
   local count = store.count()
   if count > 0 then
     local markdown = export.generate_markdown()
@@ -172,7 +177,9 @@ function M.close()
     vim.notify(string.format("Exported %d comment(s) to clipboard", count), vim.log.levels.INFO, { title = "review.nvim" })
   end
 
-  vim.cmd("tabclose")
+  if not pcall(vim.cmd, "tabclose") then
+    vim.notify("Could not close review tab", vim.log.levels.WARN, { title = "review.nvim" })
+  end
   hooks.on_session_closed()
   storage.clear_revisions()
 end
