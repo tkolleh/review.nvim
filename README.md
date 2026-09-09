@@ -1,6 +1,6 @@
 # review.nvim 🧐
 
-Code review annotations for codediff.nvim, optimized for AI feedback loops.
+Code review annotations optimized for AI feedback loops.
 
 > **This is a hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim), diverged as of `v2.0.0`. The storage layer was rewritten from a flat per-branch JSON file to a DuckDB-backed, multi-writer-safe design, and the project's direction has shifted toward being a more general-purpose multi-author commenting tool rather than a single-reviewer annotation layer.
 
@@ -11,13 +11,10 @@ review.nvim reviews local diffs (working tree, commits, revision ranges) — it 
 ## Features
 
 - Add comments to specific lines in diff view (Note, Suggestion, Issue, Praise)
-- Multi-line comment support with box-style virtual text display
-- Comments displayed as signs, line highlights, and virtual text
 - Comment box borders are colored deterministically per author (derived from a hash of the author string), so you can tell at a glance whose comment is whose — always on, and adapts automatically to `:set background`
 - Comments persist per branch in a local DuckDB file (Neovim's XDG data directory: `~/.local/share/nvim/review/`), safe for multiple writers (e.g. you and an AI agent) commenting concurrently
-- An AI agent can read and add comments in that same file directly via a bundled skill — no need to open Neovim to join the review
+- An AI agent can read and add comments in that same file directly via a bundled [skill](skills/review-nvim) — no need to open Neovim to join the review
 - Auto-export comments to clipboard when closing
-- Export format optimized for AI conversations
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
 - Commit picker modal to select specific commits to review
 - Built on top of codediff.nvim
@@ -31,14 +28,11 @@ review.nvim reviews local diffs (working tree, commits, revision ranges) — it 
 
 ## Installation
 
-This plugin uses [semantic versioning](https://semver.org/). Pin to a tag to avoid breaking changes.
-
 Using lazy.nvim:
 
 ```lua
 {
   "tkolleh/review.nvim",
-  version = "v*",
   dependencies = {
     "esmuellert/codediff.nvim",
     "MunifTanjim/nui.nvim",
@@ -96,7 +90,7 @@ DuckDB file this plugin uses — no need to open Neovim. Comments an agent adds 
 next `:Review` session, and comments you leave are visible to the agent's next read, so a human
 and an agent can converse in the same review thread.
 
-This is bundled as an [Agent Skill](https://agentskills.io) at [`skills/review-nvim`](skills/review-nvim); see its
+This is bundled as an Agent Skill at [`skills/review-nvim`](skills/review-nvim); see its
 [SKILL.md](skills/review-nvim/SKILL.md) for usage. Install it with [`npx skills`](https://skills.sh):
 
 ```bash
@@ -154,22 +148,6 @@ All keymaps can be set to `false` to disable them.
 | `popup_cancel` | `q` | Cancel comment (popup, normal mode) |
 | `popup_cycle_type` | `<Tab>` | Cycle comment type (popup) |
 
-```lua
-require("review").setup({
-  comment_types = {
-    note = { key = "n", name = "Note", icon = "📝", hl = "ReviewNote" },
-    suggestion = { key = "s", name = "Suggestion", icon = "💡", hl = "ReviewSuggestion" },
-    issue = { key = "i", name = "Issue", icon = "⚠️", hl = "ReviewIssue" },
-    praise = { key = "p", name = "Praise", icon = "✨", hl = "ReviewPraise" },
-  },
-  keymaps = {
-    delete_comment = "<localleader>d",
-    edit_comment = "<localleader>e",
-    next_comment = "]n",
-    prev_comment = "[n",
-  },
-})
-```
 
 ## Export Format
 
@@ -193,9 +171,6 @@ Lines prefixed with `~` (e.g. `:~45`) refer to the old (left) side of the diff. 
 just test
 ```
 
-## License
-
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
 ## 🌟 Credits
 
