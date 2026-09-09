@@ -257,36 +257,4 @@ function M.add_praise()
   comments.add_at_cursor("praise")
 end
 
-function M.toggle_readonly()
-  local cfg = config.get()
-  cfg.codediff.readonly = not cfg.codediff.readonly
-
-  local ok, lifecycle = pcall(require, "codediff.ui.lifecycle")
-  if not ok then
-    return
-  end
-
-  local tabpage = hooks.get_current_tabpage()
-  if not tabpage then
-    return
-  end
-
-  local orig_buf, mod_buf = lifecycle.get_buffers(tabpage)
-
-  if orig_buf and vim.api.nvim_buf_is_valid(orig_buf) then
-    vim.api.nvim_set_option_value("modifiable", not cfg.codediff.readonly, { buf = orig_buf })
-    vim.api.nvim_set_option_value("readonly", cfg.codediff.readonly, { buf = orig_buf })
-  end
-  if mod_buf and vim.api.nvim_buf_is_valid(mod_buf) then
-    vim.api.nvim_set_option_value("modifiable", not cfg.codediff.readonly, { buf = mod_buf })
-    vim.api.nvim_set_option_value("readonly", cfg.codediff.readonly, { buf = mod_buf })
-  end
-
-  keymaps.clear_keymaps()
-  keymaps.setup_keymaps(tabpage)
-
-  local mode = cfg.codediff.readonly and "readonly" or "edit"
-  vim.notify("Switched to " .. mode .. " mode", vim.log.levels.INFO, { title = "review.nvim" })
-end
-
 return M

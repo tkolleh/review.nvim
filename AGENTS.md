@@ -18,7 +18,7 @@ release (see Gotchas below).
 
 ## Repo Map
 - `plugin/review.lua` - defines the `:Review` user command and its subcommands (open, commits,
-  close, export, preview, sidekick, clear, list, toggle); entrypoint loaded automatically by Neovim.
+  close, export, preview, sidekick, clear, list); entrypoint loaded automatically by Neovim.
 - `lua/review/init.lua` - `setup()` and the public `M.open/close/export/...` API; wires up
   autocmds that detect codediff.nvim sessions (`TabEnter`, `TabClosed`, `User CodeDiffOpen`).
 - `lua/review/config.lua` - default config, `comment_types`, `keymaps` merge/validation.
@@ -39,7 +39,8 @@ release (see Gotchas below).
 - `lua/review/popup.lua` - the nui.nvim input popup used to add/edit a comment.
 - `lua/review/picker.lua` - commit picker modal for `:Review commits`.
 - `lua/review/hooks.lua` - integration hooks into codediff.nvim session lifecycle.
-- `lua/review/keymaps.lua` - sets/clears the diff-view keymaps (readonly vs edit mode).
+- `lua/review/keymaps.lua` - sets/clears the diff-view keymaps (buffers are always locked; no
+  readonly/edit mode split).
 - `lua/review/export.lua` - Markdown generation and clipboard/sidekick/preview export.
 - `lua/review/highlights.lua` - defines `ReviewNote`/`ReviewSuggestion`/`ReviewIssue`/`ReviewPraise`.
 - `lua/review/utils.lua` - small shared helpers.

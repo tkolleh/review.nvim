@@ -135,29 +135,11 @@ describe("diff buffer editability", function()
     end
   end)
 
-  it("restores what the session displaced even after toggling edit mode", function()
-    local tabpage = vim.api.nvim_get_current_tabpage()
-    local orig, mod = new_buf(true), new_buf(true)
-    pair = { orig, mod }
-
-    hooks.on_session_created(tabpage)
-
-    -- Toggling is a live reviewer affordance, not a handover of the buffer:
-    -- it must not disturb what close restores, however often it is used.
-    require("review").toggle_readonly()
-    require("review").toggle_readonly()
-
-    hooks.on_session_closed()
-
-    for _, buf in ipairs({ orig, mod }) do
-      local modifiable, readonly = editability(buf)
-      assert.is_true(modifiable, "toggling lost the recorded state")
-      assert.is_false(readonly, "toggling lost the recorded state")
-    end
-  end)
-
-  it("skips locking when readonly mode is disabled", function()
-    config.setup({ codediff = { readonly = false } })
+  it("locks buffers unconditionally, with no config flag to disable it", function()
+    -- Locking used to be gated behind codediff.readonly; that flag and the
+    -- edit-mode toggle it selected are both gone, so an unrelated config
+    -- override must not accidentally suppress the lock.
+    config.setup({ keymaps = { close = "Q" } })
     local orig, mod = new_buf(true), new_buf(true)
     pair = { orig, mod }
 
@@ -165,8 +147,8 @@ describe("diff buffer editability", function()
 
     for _, buf in ipairs({ orig, mod }) do
       local modifiable, readonly = editability(buf)
-      assert.is_true(modifiable, "buffer locked despite readonly = false")
-      assert.is_false(readonly, "buffer locked despite readonly = false")
+      assert.is_false(modifiable, "buffer should lock regardless of config")
+      assert.is_true(readonly, "buffer should lock regardless of config")
     end
   end)
 

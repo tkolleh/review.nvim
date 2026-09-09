@@ -1,7 +1,6 @@
 local M = {}
 
 local marks = require("review.marks")
-local config = require("review.config")
 local store = require("review.store")
 local normalize_path = require("review.utils").normalize_path
 
@@ -270,11 +269,8 @@ function M.on_session_created(tabpage)
   set_buffer_filetype(orig_buf, to_path_string(raw_orig_path))
   set_buffer_filetype(mod_buf, to_path_string(raw_mod_path))
 
-  local cfg = config.get()
-  if cfg.codediff.readonly then
-    lock_buffer(orig_buf)
-    lock_buffer(mod_buf)
-  end
+  lock_buffer(orig_buf)
+  lock_buffer(mod_buf)
 
   if buf_augroup then
     pcall(vim.api.nvim_del_augroup_by_id, buf_augroup)
@@ -349,11 +345,8 @@ function M.on_file_changed(tabpage)
   set_buffer_filetype(orig_buf, to_path_string(raw_orig_path))
   set_buffer_filetype(mod_buf, to_path_string(raw_mod_path))
 
-  local cfg = config.get()
-  if cfg.codediff.readonly then
-    lock_buffer(orig_buf)
-    lock_buffer(mod_buf)
-  end
+  lock_buffer(orig_buf)
+  lock_buffer(mod_buf)
 
   vim.defer_fn(function()
     marks.refresh()

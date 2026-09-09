@@ -284,7 +284,16 @@ function M.list()
     if ok then
       local tabpage = hooks.get_current_tabpage()
       if tabpage then
-        local explorer = lifecycle.get_explorer(tabpage)
+        -- codediff.nvim v2.67.2 (commit b263f54) renamed get_explorer() to
+        -- get_panel_view(); fall back for versions before that rename.
+        local explorer
+        if lifecycle.get_panel_name(tabpage) == "explorer" then
+          if lifecycle.get_panel_view then
+            explorer = lifecycle.get_panel_view(tabpage)
+          elseif lifecycle.get_explorer then
+            explorer = lifecycle.get_explorer(tabpage)
+          end
+        end
         if explorer then
           local explorer_mod = require("codediff.ui.explorer")
           for i, node in ipairs(explorer.tree:get_nodes()) do

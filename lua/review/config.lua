@@ -3,7 +3,6 @@ local M = {}
 ---@class ReviewConfig
 ---@field comment_types table<string, CommentType>
 ---@field keymaps ReviewKeymaps
----@field codediff ReviewCodediffConfig
 
 ---@class CommentType
 ---@field key string
@@ -14,10 +13,7 @@ local M = {}
 
 ---@class ReviewKeymaps
 ---@field add_comment string|false
----@field add_note string|false
----@field add_suggestion string|false
----@field add_issue string|false
----@field add_praise string|false
+---@field add_file_comment string|false
 ---@field delete_comment string|false
 ---@field edit_comment string|false
 ---@field next_comment string|false
@@ -27,22 +23,10 @@ local M = {}
 ---@field send_sidekick string|false
 ---@field clear_comments string|false
 ---@field close string|false
----@field toggle_readonly string|false
----@field next_file string|false
----@field prev_file string|false
----@field toggle_file_panel string|false
----@field readonly_add string|false
----@field readonly_delete string|false
----@field readonly_edit string|false
----@field readonly_add_file string|false
----@field add_file_comment string|false
+---@field show_help string|false
 ---@field popup_submit string|false
 ---@field popup_cancel string|false
----@field show_help string|false
 ---@field popup_cycle_type string|false
-
----@class ReviewCodediffConfig
----@field readonly boolean
 
 ---@type ReviewConfig
 M.defaults = {
@@ -53,42 +37,26 @@ M.defaults = {
     praise = { key = "p", name = "Praise", icon = "✨", hl = "ReviewPraise", line_hl = "ReviewPraiseLine" },
   },
   keymaps = {
-    -- Edit mode (leader-based)
-    add_comment = "<localleader>cc",
-    add_note = "<localleader>cn",
-    add_suggestion = "<localleader>cs",
-    add_issue = "<localleader>ci",
-    add_praise = "<localleader>cp",
-    add_file_comment = "<localleader>cf",
-    delete_comment = "<localleader>cd",
-    edit_comment = "<localleader>ce",
+    -- Comment actions
+    add_comment = "<localleader>c",
+    add_file_comment = "<localleader>f",
+    edit_comment = "<localleader>e",
+    delete_comment = "<localleader>d",
     -- Navigation
     next_comment = "]n",
     prev_comment = "[n",
-    next_file = "<Tab>",
-    prev_file = "<S-Tab>",
-    toggle_file_panel = "f",
     -- Common actions
     list_comments = "c",
     export_clipboard = "C",
     send_sidekick = "S",
     clear_comments = "<C-r>",
     close = "q",
-    toggle_readonly = "R",
-    -- Readonly mode (simple keys)
-    readonly_add = "i",
-    readonly_delete = "d",
-    readonly_edit = "e",
-    readonly_add_file = "F",
     -- Help
     show_help = "?",
     -- Popup keymaps
     popup_submit = "<C-s>",
     popup_cancel = "q",
     popup_cycle_type = "<Tab>",
-  },
-  codediff = {
-    readonly = true,
   },
 }
 

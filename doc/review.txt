@@ -74,9 +74,6 @@ All commands use the `:Review` prefix.
                                                                *:Review-clear*
 :Review clear               Clear all comments.
 
-                                                              *:Review-toggle*
-:Review toggle              Toggle between readonly and edit mode.
-
 ==============================================================================
 4. CONFIGURATION                                              *review-config*
 
@@ -115,62 +112,31 @@ All fields are optional; defaults are shown.
         },
       },
 
-      codediff = {
-        readonly = true,
-      },
-
       keymaps = { ... },  -- see |review-keymaps|
     })
 <
-
-                                                     *review-config-codediff*
-codediff.readonly ~
-    When true (default), diff buffers are readonly and simple single-key
-    keymaps are active (e.g. `i` to add comment). When false, leader-based
-    keymaps are used instead. Toggle at runtime with `R`.
-
-    Closing the review restores each buffer's `modifiable` and `readonly`
-    to the values it had before the review locked it, so a working tree
-    buffer reused in normal editing afterwards is editable again.
 
 ==============================================================================
 5. KEYMAPS                                                   *review-keymaps*
 
 All keymaps can be customized via `opts.keymaps`. Set a key to `false` to
-disable it. Keymaps are buffer-local to the review diff buffers.
+disable it. Keymaps are buffer-local to the review diff buffers, which stay
+locked against edits for the whole review; closing it restores each
+buffer's original editability.
 
-READONLY MODE (default)                              *review-keymaps-readonly*
+COMMENTS                                           *review-keymaps-comments*
 
-These keymaps are active when `codediff.readonly = true`:
-
-    Key     Description ~
-    `i`       Add comment (opens type picker)         |n, x|
-    `e`       Edit comment at cursor                  |n|
-    `d`       Delete comment at cursor                |n|
-    `F`       Add file-level comment                  |n|
-
-EDIT MODE                                               *review-keymaps-edit*
-
-These keymaps are active when `codediff.readonly = false`:
-
-    Key           Description ~
-    `<localleader>cc`    Add comment (pick type)              |n, x|
-    `<localleader>cn`    Add note                            |n, x|
-    `<localleader>cs`    Add suggestion                      |n, x|
-    `<localleader>ci`    Add issue                           |n, x|
-    `<localleader>cp`    Add praise                          |n, x|
-    `<localleader>cf`    Add file-level comment              |n|
-    `<localleader>ce`    Edit comment at cursor              |n|
-    `<localleader>cd`    Delete comment at cursor            |n|
+    Key                 Description ~
+    `<localleader>c`      Add comment (opens type picker)       |n, x|
+    `<localleader>f`      Add file-level comment                |n|
+    `<localleader>e`      Edit comment at cursor                |n|
+    `<localleader>d`      Delete comment at cursor              |n|
 
 NAVIGATION                                               *review-keymaps-nav*
 
     Key         Description ~
     `]n`          Next comment in file                  |n|
     `[n`          Previous comment in file              |n|
-    `<Tab>`       Next file in explorer                 |n|
-    `<S-Tab>`     Previous file in explorer             |n|
-    `f`           Toggle file panel                     |n|
     `c`           List all comments                     |n|
 
 ACTIONS                                               *review-keymaps-actions*
@@ -179,11 +145,11 @@ ACTIONS                                               *review-keymaps-actions*
     `C`           Export to clipboard + preview          |n|
     `S`           Send to sidekick.nvim                  |n|
     `<C-r>`       Clear all comments                     |n|
-    `R`           Toggle readonly/edit mode               |n|
     `q`           Export & close review                   |n|
     `?`           Show help popup                         |n|
-    `t`           Toggle layout (side-by-side/inline)     |n|
-    `g?`          Show codediff help                      |n|
+
+Provided by codediff.nvim itself, not review.nvim: `]f`/`[f` (next/previous
+file), `<leader>b` (toggle file panel), `t` (toggle layout), `g?` (help).
 
 POPUP                                                 *review-keymaps-popup*
 

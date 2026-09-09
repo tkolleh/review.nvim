@@ -133,3 +133,129 @@ describe("keymaps explorer leak prevention", function()
     assert.is_false(vim.tbl_isempty(mapping), "review keymap missing from codediff diff buffer")
   end)
 end)
+
+describe("keymaps tab leak prevention", function()
+  local orig_buf, mod_buf
+  local real_lifecycle
+  local close_key
+  local review_tab
+
+  before_each(function()
+    config.setup()
+    close_key = config.get().keymaps.close
+
+    orig_buf = vim.api.nvim_create_buf(false, true)
+    mod_buf = vim.api.nvim_create_buf(false, true)
+
+    real_lifecycle = package.loaded["codediff.ui.lifecycle"]
+    package.loaded["codediff.ui.lifecycle"] = {
+      get_session = function()
+        return { modified_win = vim.api.nvim_get_current_win() }
+      end,
+      get_buffers = function()
+        return orig_buf, mod_buf
+      end,
+    }
+  end)
+
+  after_each(function()
+    keymaps.cleanup()
+    package.loaded["codediff.ui.lifecycle"] = real_lifecycle
+
+    while vim.fn.tabpagenr("$") > 1 do
+      vim.cmd("tabclose")
+    end
+
+    for _, buf in ipairs({ orig_buf, mod_buf }) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end
+    end
+  end)
+
+  it("clears review keymaps from the buffer when leaving the review tab", function()
+    review_tab = vim.api.nvim_get_current_tabpage()
+    vim.api.nvim_set_current_buf(mod_buf)
+    keymaps.setup_keymaps(review_tab)
+
+    local mapping = vim.fn.maparg(close_key, "n", false, true)
+    assert.is_false(vim.tbl_isempty(mapping), "review keymap missing before leaving tab")
+
+    -- codediff renders the modified side in the file's own buffer, so opening
+    -- it in another tab is exactly the leak scenario this guards against.
+    vim.cmd("tabnew")
+    vim.api.nvim_set_current_buf(mod_buf)
+
+    local mapping_after = vim.fn.maparg(close_key, "n", false, true)
+    assert.is_true(vim.tbl_isempty(mapping_after), "review keymap leaked into new tab")
+  end)
+
+  it("restores review keymaps when re-entering the review tab", function()
+    review_tab = vim.api.nvim_get_current_tabpage()
+    vim.api.nvim_set_current_buf(mod_buf)
+    keymaps.setup_keymaps(review_tab)
+
+    vim.cmd("tabnew")
+    vim.cmd("tabprevious")
+
+    -- production restore is init.lua's TabEnter -> _check_codediff_session ->
+    -- setup_keymaps chain; call the last link directly since that autocmd
+    -- lives outside this module.
+    keymaps.setup_keymaps(review_tab)
+
+    local mapping = vim.fn.maparg(close_key, "n", false, true)
+    assert.is_false(vim.tbl_isempty(mapping), "review keymap not restored after returning to tab")
+  end)
+end)
+
+describe("keymaps restore pre-existing user mappings on teardown", function()
+  local orig_buf, mod_buf
+  local real_lifecycle
+  local close_key
+
+  before_each(function()
+    config.setup()
+    close_key = config.get().keymaps.close
+
+    orig_buf = vim.api.nvim_create_buf(false, true)
+    mod_buf = vim.api.nvim_create_buf(false, true)
+
+    real_lifecycle = package.loaded["codediff.ui.lifecycle"]
+    package.loaded["codediff.ui.lifecycle"] = {
+      get_session = function()
+        return { modified_win = vim.api.nvim_get_current_win() }
+      end,
+      get_buffers = function()
+        return orig_buf, mod_buf
+      end,
+    }
+  end)
+
+  after_each(function()
+    keymaps.cleanup()
+    package.loaded["codediff.ui.lifecycle"] = real_lifecycle
+
+    for _, buf in ipairs({ orig_buf, mod_buf }) do
+      if vim.api.nvim_buf_is_valid(buf) then
+        vim.api.nvim_buf_delete(buf, { force = true })
+      end
+    end
+  end)
+
+  it("restores a user's own buffer-local mapping instead of deleting it", function()
+    vim.api.nvim_set_current_buf(mod_buf)
+    vim.keymap.set("n", close_key, "<Nop>", { buffer = mod_buf, desc = "user's own mapping" })
+
+    local tabpage = vim.api.nvim_get_current_tabpage()
+    keymaps.setup_keymaps(tabpage)
+
+    -- review's own mapping is shadowing the user's for now
+    local shadowed = vim.fn.maparg(close_key, "n", false, true)
+    assert.are_not.equal("user's own mapping", shadowed.desc)
+
+    keymaps.clear_keymaps()
+
+    local restored = vim.fn.maparg(close_key, "n", false, true)
+    assert.equals("user's own mapping", restored.desc)
+  end)
+end)

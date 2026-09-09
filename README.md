@@ -66,18 +66,17 @@ Using lazy.nvim:
 :Review sidekick     " Send comments to sidekick.nvim
 :Review list         " List all comments
 :Review clear        " Clear all comments
-:Review toggle       " Toggle readonly/edit mode
 ```
 
 ## Workflow
 
-Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). The diff opens in a new tab with a file panel on the left.
+Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). The diff opens in a new tab, locked against edits, with a file panel on the left.
 
-Navigate with `<Tab>`/`<S-Tab>` (files), `f` (toggle file panel), `t` (side-by-side/inline), `<C-w>h`/`<C-w>l` (old/new pane). Press `i` on a line to comment; pick a type (note, suggestion, issue, praise) from the menu. The comment renders as a box below the line with a sign in the gutter.
+Navigate with codediff's `]f`/`[f` (files), `<leader>b` (file panel), `t` (side-by-side/inline), `<C-w>h`/`<C-w>l` (old/new pane). Press `<localleader>c` on a line to comment; pick a type (note, suggestion, issue, praise) from the menu. The comment renders as a box below the line with a sign in the gutter.
 
-Visually select a range before `i` for a multi-line comment, or press `F` for a file-level comment. Left-side (old) and right-side (new) comments only show on their own side.
+Visually select a range before `<localleader>c` for a multi-line comment, or press `<localleader>f` for a file-level comment. Left-side (old) and right-side (new) comments only show on their own side.
 
-Use `]n`/`[n` to jump between comments, `e` to edit, `d` to delete, `c` to list and jump to any comment.
+Use `]n`/`[n` to jump between comments, `<localleader>e` to edit, `<localleader>d` to delete, `c` to list and jump to any comment.
 
 Press `q` to close the review — this copies all comments to the clipboard as structured markdown and shows a preview, ready to paste into Claude Code, sidekick.nvim (`S`), or any AI chat:
 
@@ -106,36 +105,23 @@ npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/re
 
 ## Keybindings (in diff view)
 
-**Readonly mode** (default):
+The diff is always locked against edits, so review.nvim's own keys never shadow a Vim motion:
 | Key | Action |
 |-----|--------|
-| `i` | Add comment (pick type from menu) |
-| `F` | Add file-level comment |
-| `d` | Delete comment at cursor |
-| `e` | Edit comment at cursor |
+| `<localleader>c` | Add comment (pick type from menu) |
+| `<localleader>f` | Add file-level comment |
+| `<localleader>e` | Edit comment at cursor |
+| `<localleader>d` | Delete comment at cursor |
+| `]n` / `[n` | Jump to next/previous comment |
 | `c` | List all comments |
-| `f` | Toggle file panel visibility |
-| `R` | Toggle readonly/edit mode |
-| `<Tab>` | Next file |
-| `<S-Tab>` | Previous file |
-| `]n` | Jump to next comment |
-| `[n` | Jump to previous comment |
 | `C` | Export to clipboard and show preview |
 | `S` | Send comments to sidekick.nvim |
 | `<C-r>` | Clear all comments |
 | `q` | Close and export comments to clipboard |
 | `?` | Show review.nvim keymap help |
-| `t` | Toggle side-by-side/inline layout |
-| `g?` | Show codediff help |
 
-**Edit mode** (when `readonly = false`):
-| Key | Action |
-|-----|--------|
-| `<localleader>cc` | Add comment (pick type from menu) |
-| `<localleader>cn/cs/ci/cp` | Add Note/Suggestion/Issue/Praise |
-| `<localleader>cf` | Add file-level comment |
-| `<localleader>cd` | Delete comment |
-| `<localleader>ce` | Edit comment |
+Courtesy of codediff.nvim itself: `]f`/`[f` (next/previous file), `<leader>b` (toggle file panel),
+`t` (toggle side-by-side/inline layout), `g?` (codediff help).
 
 **Comment popup** (when adding/editing):
 | Key | Action |
@@ -152,29 +138,17 @@ All keymaps can be set to `false` to disable them.
 **Keymap options**
 | Option | Default | Action |
 |--------|---------|--------|
-| `add_comment` | `<localleader>cc` | Add comment, pick type (edit mode) |
-| `add_note` | `<localleader>cn` | Add note (edit mode) |
-| `add_suggestion` | `<localleader>cs` | Add suggestion (edit mode) |
-| `add_issue` | `<localleader>ci` | Add issue (edit mode) |
-| `add_praise` | `<localleader>cp` | Add praise (edit mode) |
-| `add_file_comment` | `<localleader>cf` | Add file-level comment (edit mode) |
-| `delete_comment` | `<localleader>cd` | Delete comment (edit mode) |
-| `edit_comment` | `<localleader>ce` | Edit comment (edit mode) |
+| `add_comment` | `<localleader>c` | Add comment, pick type |
+| `add_file_comment` | `<localleader>f` | Add file-level comment |
+| `edit_comment` | `<localleader>e` | Edit comment |
+| `delete_comment` | `<localleader>d` | Delete comment |
 | `next_comment` | `]n` | Next comment |
 | `prev_comment` | `[n` | Previous comment |
-| `next_file` | `<Tab>` | Next file |
-| `prev_file` | `<S-Tab>` | Previous file |
-| `toggle_file_panel` | `f` | Toggle file panel |
 | `list_comments` | `c` | List all comments |
 | `export_clipboard` | `C` | Export to clipboard |
 | `send_sidekick` | `S` | Send comments to sidekick |
 | `clear_comments` | `<C-r>` | Clear all comments |
 | `close` | `q` | Close and export |
-| `toggle_readonly` | `R` | Toggle readonly/edit mode |
-| `readonly_add` | `i` | Add comment (readonly mode) |
-| `readonly_delete` | `d` | Delete comment (readonly mode) |
-| `readonly_edit` | `e` | Edit comment (readonly mode) |
-| `readonly_add_file` | `F` | Add file-level comment (readonly mode) |
 | `show_help` | `?` | Show review.nvim keymap help |
 | `popup_submit` | `<C-s>` | Submit comment (popup, insert & normal) |
 | `popup_cancel` | `q` | Cancel comment (popup, normal mode) |
@@ -189,18 +163,10 @@ require("review").setup({
     praise = { key = "p", name = "Praise", icon = "✨", hl = "ReviewPraise" },
   },
   keymaps = {
-    add_note = "<localleader>cn",
-    add_suggestion = "<localleader>cs",
-    add_issue = "<localleader>ci",
-    add_praise = "<localleader>cp",
-    delete_comment = "<localleader>cd",
-    edit_comment = "<localleader>ce",
+    delete_comment = "<localleader>d",
+    edit_comment = "<localleader>e",
     next_comment = "]n",
     prev_comment = "[n",
-    toggle_file_panel = "f",
-  },
-  codediff = {
-    readonly = true,
   },
 })
 ```
