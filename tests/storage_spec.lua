@@ -202,8 +202,7 @@ describe("review.storage", function()
       local old_time = os.time() - (8 * 24 * 60 * 60)
       os.execute(string.format("touch -t %s %s", os.date("%Y%m%d%H%M.%S", old_time), vim.fn.shellescape(path)))
 
-      storage.cleanup_expired_now()
-
+      assert.equals(1, storage.cleanup_expired_now())
       assert.equals(0, vim.fn.filereadable(path))
     end)
 
@@ -215,9 +214,119 @@ describe("review.storage", function()
         end)
       end)
 
-      storage.cleanup_expired_now()
-
+      assert.equals(0, storage.cleanup_expired_now())
       assert.equals(1, vim.fn.filereadable(path))
+    end)
+  end)
+
+  -- rule-success.ClearedCommentsAreHardDeleted: a comment soft-deleted (via
+  -- store.lua's M.clear_comments, which stamps deleted_at) more than
+  -- session_retention_seconds ago is permanently removed; one within the
+  -- window is left alone so it stays recoverable via direct storage access.
+  describe("row-level hard-delete sweep (ClearedCommentsAreHardDeleted)", function()
+    local duckdb = require("review.duckdb")
+
+    before_each(function()
+      require("review.store").clear()
+    end)
+
+    local function await(fn)
+      local done = false
+      fn(function()
+        done = true
+      end)
+      vim.wait(2000, function()
+        return done
+      end, 10)
+      assert.is_true(done, "callback did not fire within timeout")
+    end
+
+    local function hard_delete_now()
+      local removed
+      await(function(done)
+        storage.hard_delete_expired_comments_now(function(count)
+          removed = count
+          done()
+        end)
+      end)
+      return removed
+    end
+
+    ---Mirrors comments_spec.lua's await, needed here to capture a
+    ---duckdb.query callback's result rather than just its completion.
+    local function await_result(fn)
+      local done = false
+      local results, n
+      fn(function(...)
+        results = { ... }
+        n = select("#", ...)
+        done = true
+      end)
+      vim.wait(2000, function()
+        return done
+      end, 10)
+      assert.is_true(done, "callback did not fire within timeout")
+      return unpack(results, 1, n)
+    end
+
+    it("removes a comment soft-deleted past the retention window", function()
+      local path = storage.get_storage_path()
+      await(function(done)
+        storage.ensure_schema(path, function()
+          duckdb.query(
+            path,
+            [[INSERT INTO review_comments (comment_scope, comment_type, content, deleted_at)
+              VALUES ('file', 'note', 'cleared long ago', now() - INTERVAL '8 days');]],
+            nil,
+            done
+          )
+        end)
+      end)
+
+      assert.equals(1, hard_delete_now())
+
+      local _, remaining = await_result(function(done)
+        duckdb.query(path, "SELECT id FROM review_comments;", { readonly = true }, done)
+      end)
+      assert.equals(0, #remaining)
+    end)
+
+    it("keeps a comment soft-deleted within the retention window", function()
+      local path = storage.get_storage_path()
+      await(function(done)
+        storage.ensure_schema(path, function()
+          duckdb.query(
+            path,
+            [[INSERT INTO review_comments (comment_scope, comment_type, content, deleted_at)
+              VALUES ('file', 'note', 'cleared recently', now() - INTERVAL '1 hour');]],
+            nil,
+            done
+          )
+        end)
+      end)
+
+      assert.equals(0, hard_delete_now())
+
+      local _, remaining = await_result(function(done)
+        duckdb.query(path, "SELECT id FROM review_comments;", { readonly = true }, done)
+      end)
+      assert.equals(1, #remaining)
+    end)
+
+    it("never touches a comment that has not been cleared", function()
+      local path = storage.get_storage_path()
+      await(function(done)
+        storage.ensure_schema(path, function()
+          duckdb.query(path, "INSERT INTO review_comments (comment_scope, comment_type, content) VALUES ('file', 'note', 'still active');", nil, done)
+        end)
+      end)
+
+      assert.equals(0, hard_delete_now())
+
+      local _, remaining = await_result(function(done)
+        duckdb.query(path, "SELECT id FROM review_comments;", { readonly = true }, done)
+      end)
+      assert.equals(1, #remaining)
     end)
   end)
 end)

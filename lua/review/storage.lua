@@ -163,6 +163,12 @@ end
 -- `ALTER TABLE ... ADD COLUMN ... GENERATED`), so a pre-existing .duckdb file
 -- predating this column won't gain it. Comments are disposable, and
 -- `:Review clear` already resets a session's storage file on demand.
+--
+-- deleted_at is a plain (non-generated) column, so unlike color_dark/light
+-- above it CAN reach a pre-existing .duckdb file: `ALTER TABLE ... ADD
+-- COLUMN IF NOT EXISTS` is idempotent for a plain column (verified against
+-- DuckDB 1.5.5 directly -- its docs don't state this either way), so it runs
+-- unconditionally alongside the CREATE TABLEs on every bootstrap.
 local SCHEMA_SQL = string.format([[
 CREATE TABLE IF NOT EXISTS review_sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -190,6 +196,7 @@ CREATE TABLE IF NOT EXISTS review_comments (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_comments_file ON review_comments(file_path);
+ALTER TABLE review_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ]], author_color_expr(AUTHOR_PALETTE_DARK), author_color_expr(AUTHOR_PALETTE_LIGHT))
 
 ---@type table<string, boolean>
@@ -225,20 +232,63 @@ M.config = {
 -- Sweeps *.duckdb files older than the retention window, using file mtime
 -- rather than tracking session activity -- simple and good enough since
 -- storage files are disposable per-branch caches, not durable records.
+---@return number removed count of files removed
 function M.cleanup_expired_now()
   local files = vim.fn.glob(data_dir .. "/*.duckdb", false, true)
   local now = os.time()
+  local removed = 0
   for _, filepath in ipairs(files) do
     local mtime = vim.fn.getftime(filepath)
     if mtime > 0 and (now - mtime) > M.config.session_retention_seconds then
       os.remove(filepath)
       schema_ready[filepath] = nil
+      removed = removed + 1
     end
+  end
+  return removed
+end
+
+-- Row-level counterpart to cleanup_expired_now: hard-deletes comments
+-- store.lua's M.clear_comments soft-deleted (stamped deleted_at) more than
+-- session_retention_seconds ago, across every known storage file. Files
+-- cleanup_expired_now already removed above are simply absent from this
+-- glob re-run, so there's no wasted work sweeping a file about to be gone.
+---@param callback fun(removed: number) total rows hard-deleted, across all files
+function M.hard_delete_expired_comments_now(callback)
+  local files = vim.fn.glob(data_dir .. "/*.duckdb", false, true)
+  if #files == 0 then
+    callback(0)
+    return
+  end
+
+  local sql = string.format(
+    "DELETE FROM review_comments WHERE deleted_at IS NOT NULL AND deleted_at <= now() - INTERVAL '%d seconds' RETURNING id;",
+    M.config.session_retention_seconds
+  )
+
+  local remaining = #files
+  local total = 0
+  for _, filepath in ipairs(files) do
+    duckdb.query(filepath, sql, nil, function(ok, result)
+      if ok and result then
+        total = total + #result
+      end
+      remaining = remaining - 1
+      if remaining == 0 then
+        callback(total)
+      end
+    end)
   end
 end
 
 local cleanup_done = false
 
+-- Wires both retention sweeps together, deferred so it never delays
+-- startup. Neither sweep was reachable before this (cleanup_expired_now had
+-- no caller anywhere in the plugin -- a dormant bug, not a deliberate
+-- opt-in), so this is a real behavioural change: existing storage files
+-- already past the retention window get swept on first load after
+-- upgrading. Notifying what was removed keeps that from being silent.
 function M.cleanup_expired()
   if cleanup_done then
     return
@@ -246,7 +296,23 @@ function M.cleanup_expired()
   cleanup_done = true
 
   vim.defer_fn(function()
-    M.cleanup_expired_now()
+    local removed_sessions = M.cleanup_expired_now()
+    M.hard_delete_expired_comments_now(function(removed_comments)
+      local parts = {}
+      if removed_sessions > 0 then
+        table.insert(parts, string.format("%d expired session(s)", removed_sessions))
+      end
+      if removed_comments > 0 then
+        table.insert(parts, string.format("%d expired comment(s)", removed_comments))
+      end
+      if #parts > 0 then
+        vim.notify(
+          "review.nvim: removed " .. table.concat(parts, ", "),
+          vim.log.levels.INFO,
+          { title = "review.nvim" }
+        )
+      end
+    end)
   end, 0)
 end
 

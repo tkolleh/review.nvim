@@ -20,7 +20,8 @@ entity ReviewSession {
     created_at: Timestamp
     updated_at: Timestamp
 
-    comments: Comment with session = this
+    all_comments: Comment with session = this
+    comments: all_comments where deleted_at = null
     review_comments: comments where scope = review
     file_comments: comments where scope = file
     line_comments: comments where scope = line
@@ -46,6 +47,7 @@ entity Comment {
     content: String
     author: String
     lifecycle_state: submitted | resolved
+    deleted_at: Timestamp?
     created_at: Timestamp
     updated_at: Timestamp
 }
@@ -113,6 +115,7 @@ rule IndependentWritersDoNotCollide {
 rule CommentModificationsDoNotRace {
     when: AuthorEditsComment(comment, expected_prior_content, new_content, new_type)
     requires: comment.content = expected_prior_content
+    requires: comment.deleted_at = null
     ensures:
         comment.content = new_content
     ensures:
@@ -134,6 +137,7 @@ rule CommentModificationsDoNotRace {
 rule DeletingComment {
     when: AuthorDeletesComment(comment, expected_prior_content)
     requires: comment.content = expected_prior_content
+    requires: comment.deleted_at = null
     ensures: not exists comment
     @guarantee RejectStaleModification
         -- Mirrors CommentModificationsDoNotRace's guarantee: a mismatch
@@ -145,7 +149,27 @@ rule DeletingComment {
 rule ResolvingComment {
     when: AuthorResolvesComment(comment)
     requires: comment.lifecycle_state = submitted
+    requires: comment.deleted_at = null
     ensures: comment.lifecycle_state = resolved
+}
+
+-- An author clearing a review clears every comment in the session, regardless
+-- of who wrote it -- unlike AuthorDeletesComment above, which only ever
+-- targets one comment the caller already owns. Soft-deleted rather than
+-- removed outright, so ClearedCommentsAreHardDeleted's retention window
+-- (below) gives an accidental clear a recovery path.
+rule ClearingSessionComments {
+    when: AuthorClearsSessionComments(session, author)
+    for c in session.comments:
+        ensures: c.deleted_at = now
+}
+
+-- Mirrors ExpiredSessionsAreRemoved's retention window, applied per-comment
+-- rather than per-session: a comment cleared by ClearingSessionComments
+-- above stays recoverable via direct storage access until this fires.
+rule ClearedCommentsAreHardDeleted {
+    when: comment: Comment.deleted_at <= now - config.session_retention
+    ensures: not exists comment
 }
 
 -- Storage is scoped per branch or per explicit revision range so comments
@@ -181,7 +205,7 @@ config {
 -- an explicit comment reference rather than a bare file/line location.
 rule SelectingAmbiguousComment {
     when: AuthorTargetsLocation(writer, file_path, line_start)
-    let candidates = Comment where file_path = file_path and line_start = line_start
+    let candidates = Comment where file_path = file_path and line_start = line_start and deleted_at = null
     let own = candidates where author = writer
     ensures:
         if own.count = 1:
@@ -208,6 +232,7 @@ surface CommentAuthor {
         AuthorDeletesComment(comment, expected_prior_content)
             when comment.author = writer
         AuthorResolvesComment(comment)
+        AuthorClearsSessionComments(writer)
 
     @guarantee ReadYourWrites
         -- A comment successfully submitted by writer is immediately visible

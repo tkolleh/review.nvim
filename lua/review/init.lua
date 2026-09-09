@@ -20,6 +20,7 @@ function M.setup(opts)
 
   config.setup(opts)
   highlights.setup()
+  storage.cleanup_expired()
 
   augroup = vim.api.nvim_create_augroup("review", { clear = true })
 
@@ -184,10 +185,49 @@ function M.preview()
   export.preview()
 end
 
+---Deletes this session's storage file outright -- the `:Review clear` reset
+---path for a stale/incompatible schema (AGENTS.md's Gotchas). Distinct from
+---M.clear_comments() below, which soft-deletes rows and leaves the file
+---intact; unlike that path, this one is genuinely unrecoverable, hence the
+---confirmation prompt.
 function M.clear()
+  local choice = vim.fn.confirm(
+    "Delete the entire review database for this branch? This cannot be undone.",
+    "&No\n&Yes",
+    1
+  )
+  if choice ~= 2 then
+    return
+  end
+
   store.clear()
   require("review.marks").clear_all()
-  vim.notify("All comments cleared", vim.log.levels.INFO, { title = "review.nvim" })
+  vim.notify("Storage reset", vim.log.levels.INFO, { title = "review.nvim" })
+end
+
+---Soft-deletes every comment in the current review, regardless of author.
+---Recoverable via direct storage access until storage.lua's hard-delete
+---sweep purges it past the retention window -- still confirmed, since even
+---a recoverable clear is worth one keystroke of friction to prevent.
+function M.clear_comments()
+  local choice = vim.fn.confirm("Clear all comments in this review?", "&No\n&Yes", 1)
+  if choice ~= 2 then
+    return
+  end
+
+  store.clear_comments(function(ok, err)
+    if not ok then
+      vim.notify(
+        "review.nvim: failed to clear comments: " .. (err or "unknown error"),
+        vim.log.levels.ERROR,
+        { title = "review.nvim" }
+      )
+      return
+    end
+
+    require("review.marks").clear_all()
+    vim.notify("All comments cleared", vim.log.levels.INFO, { title = "review.nvim" })
+  end)
 end
 
 function M.count()

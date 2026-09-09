@@ -328,6 +328,21 @@ describe("review.store", function()
       end)
       assert.is_false(ok)
     end)
+
+    -- Q12/CommentModificationsDoNotRace's added guard: a comment cleared via
+    -- store.clear_comments looks gone to every code path, not just reads.
+    it("rejects an edit against an already-cleared comment", function()
+      local c = add("file.lua", 10, "issue", "Original", nil, "new", "tkolleh")
+      await(function(done)
+        store.clear_comments(done)
+      end)
+
+      local ok = await(function(done)
+        store.update(c.id, "Original", "Too late", nil, done)
+      end)
+
+      assert.is_false(ok)
+    end)
   end)
 
   describe("optimistic-concurrency delete (DeletingComment)", function()
@@ -360,6 +375,21 @@ describe("review.store", function()
       local ok = await(function(done)
         store.delete("fake_id", "anything", done)
       end)
+      assert.is_false(ok)
+    end)
+
+    -- Q12/DeletingComment's added guard: a comment cleared via
+    -- store.clear_comments looks gone to every code path, not just reads.
+    it("rejects a delete against an already-cleared comment", function()
+      local c = add("file.lua", 10, "issue", "Delete me", nil, "new", "tkolleh")
+      await(function(done)
+        store.clear_comments(done)
+      end)
+
+      local ok = await(function(done)
+        store.delete(c.id, "Delete me", done)
+      end)
+
       assert.is_false(ok)
     end)
   end)
@@ -397,6 +427,21 @@ describe("review.store", function()
       local ok = await(function(done)
         store.resolve("fake_id", done)
       end)
+      assert.is_false(ok)
+    end)
+
+    -- Q12/ResolvingComment's added guard: a comment cleared via
+    -- store.clear_comments looks gone to every code path, not just reads.
+    it("rejects resolving an already-cleared comment", function()
+      local c = add("file.lua", 10, "note", "text", nil, "new", "tkolleh")
+      await(function(done)
+        store.clear_comments(done)
+      end)
+
+      local ok = await(function(done)
+        store.resolve(c.id, done)
+      end)
+
       assert.is_false(ok)
     end)
   end)
@@ -634,6 +679,62 @@ describe("review.store", function()
       assert.is_not_nil(comment)
       assert.is_nil(comment.line_end)
       assert.equals(47, comment.line_end or comment.line)
+    end)
+  end)
+
+  -- rule-success ClearingSessionComments: clearing soft-deletes every
+  -- comment regardless of author, hiding it from the cache and from a fresh
+  -- sync_from_storage read, without removing the row -- storage.lua's
+  -- hard-delete sweep (ClearedCommentsAreHardDeleted) owns actual removal.
+  describe("clearing all comments (ClearingSessionComments)", function()
+    local duckdb = require("review.duckdb")
+
+    it("soft-deletes every comment regardless of author", function()
+      add("file.lua", 10, "note", "mine", nil, "new", "tkolleh")
+      add("file.lua", 20, "note", "someone else's", nil, "new", "other-agent")
+
+      local ok = await(function(done)
+        store.clear_comments(done)
+      end)
+
+      assert.is_true(ok)
+      assert.equals(0, store.count())
+    end)
+
+    it("does not remove the underlying row -- stays recoverable via direct storage access", function()
+      local c = add("file.lua", 10, "note", "recoverable", nil, "new", "tkolleh")
+
+      await(function(done)
+        store.clear_comments(done)
+      end)
+
+      local path = require("review.storage").get_storage_path()
+      local select_ok, result = await(function(done)
+        duckdb.query(
+          path,
+          string.format("SELECT id, deleted_at FROM review_comments WHERE id = '%s';", c.id),
+          { readonly = true },
+          done
+        )
+      end)
+
+      assert.is_true(select_ok)
+      assert.equals(1, #result)
+      assert.is_not_nil(result[1].deleted_at)
+    end)
+
+    it("is hidden from a fresh sync_from_storage read after clearing", function()
+      add("file.lua", 10, "note", "cleared", nil, "new", "tkolleh")
+      await(function(done)
+        store.clear_comments(done)
+      end)
+
+      store.reset()
+      await(function(done)
+        store.sync_from_storage(done)
+      end)
+
+      assert.equals(0, store.count())
     end)
   end)
 end)

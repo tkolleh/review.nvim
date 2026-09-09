@@ -36,6 +36,12 @@ def _author_color_expr(palette):
 # intentional: review comments are disposable per specs/review-storage.allium's
 # session-retention semantics, and `:Review clear` already resets a session's
 # storage file on demand.
+#
+# deleted_at is a plain (non-generated) column, so unlike color_dark/light
+# above it CAN reach a pre-existing .duckdb file via `ALTER TABLE ... ADD
+# COLUMN IF NOT EXISTS`, which is idempotent for a plain column (verified
+# against DuckDB 1.5.5 directly). Mirrored in lua/review/storage.lua -- keep
+# both in sync.
 SCHEMA_SQL = ("""
 CREATE TABLE IF NOT EXISTS review_sessions (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,6 +69,7 @@ CREATE TABLE IF NOT EXISTS review_comments (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_comments_file ON review_comments(file_path);
+ALTER TABLE review_comments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 """ % (_author_color_expr(AUTHOR_PALETTE_DARK), _author_color_expr(AUTHOR_PALETTE_LIGHT))).strip()
 
 WRITE_CONTENTION_MAX_RETRIES = 3
@@ -174,13 +181,13 @@ def cmd_read(args):
         print(json.dumps({"status": "error", "reason": str(e), "stage": "read"}))
         sys.exit(1)
 
-    conditions = []
+    conditions = ["deleted_at IS NULL"]
     if args.file:
         conditions.append(f"file_path = {_escape_literal(args.file)}")
     if args.author:
         conditions.append(f"author = {_escape_literal(args.author)}")
 
-    where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+    where = f" WHERE {' AND '.join(conditions)}"
     sql = f"SELECT * FROM review_comments{where} ORDER BY file_path, line_start;"
 
     try:

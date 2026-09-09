@@ -75,7 +75,7 @@ function M.sync_from_storage(callback)
       return
     end
 
-    duckdb.query(path, "SELECT * FROM review_comments;", { readonly = true }, function(read_ok, result, read_err)
+    duckdb.query(path, "SELECT * FROM review_comments WHERE deleted_at IS NULL;", { readonly = true }, function(read_ok, result, read_err)
       if not read_ok then
         callback(false, read_err)
         return
@@ -307,7 +307,7 @@ end
 function M.update(id, expected_prior_content, new_content, new_type, callback)
   local sql = string.format(
     [[UPDATE review_comments SET content = %s%s, updated_at = now()
-      WHERE id = %s AND content = %s
+      WHERE id = %s AND content = %s AND deleted_at IS NULL
       RETURNING id;]],
     literal(new_content),
     new_type and (", comment_type = " .. literal(new_type)) or "",
@@ -322,12 +322,13 @@ function M.update(id, expected_prior_content, new_content, new_type, callback)
     end
 
     if #result == 0 then
-      -- Zero rows means either no such id or a stale expected_prior_content;
-      -- a cheap follow-up read disambiguates without slowing the common path.
+      -- Zero rows means either no such id, a stale expected_prior_content,
+      -- or the comment was cleared since -- a cheap follow-up read
+      -- disambiguates without slowing the common path.
       local path = db_path()
       duckdb.query(
         path,
-        string.format("SELECT id FROM review_comments WHERE id = %s;", literal(id)),
+        string.format("SELECT id FROM review_comments WHERE id = %s AND deleted_at IS NULL;", literal(id)),
         { readonly = true },
         function(select_ok, select_result)
           if select_ok and select_result and #select_result > 0 then
@@ -356,7 +357,7 @@ end
 ---@param callback fun(ok: boolean, err: string|nil)
 function M.delete(id, expected_prior_content, callback)
   local sql = string.format(
-    "DELETE FROM review_comments WHERE id = %s AND content = %s RETURNING id;",
+    "DELETE FROM review_comments WHERE id = %s AND content = %s AND deleted_at IS NULL RETURNING id;",
     literal(id),
     literal(expected_prior_content)
   )
@@ -371,7 +372,7 @@ function M.delete(id, expected_prior_content, callback)
       local path = db_path()
       duckdb.query(
         path,
-        string.format("SELECT id FROM review_comments WHERE id = %s;", literal(id)),
+        string.format("SELECT id FROM review_comments WHERE id = %s AND deleted_at IS NULL;", literal(id)),
         { readonly = true },
         function(select_ok, select_result)
           if select_ok and select_result and #select_result > 0 then
@@ -404,7 +405,7 @@ end
 function M.resolve(id, callback)
   local sql = string.format(
     [[UPDATE review_comments SET lifecycle_state = 'resolved', updated_at = now()
-      WHERE id = %s AND lifecycle_state = 'submitted'
+      WHERE id = %s AND lifecycle_state = 'submitted' AND deleted_at IS NULL
       RETURNING id;]],
     literal(id)
   )
@@ -487,6 +488,28 @@ function M.clear()
   M.reset()
   storage.clear()
   storage.clear_revisions()
+end
+
+---Soft-deletes every comment in the current session, regardless of author
+---(specs/review-storage.allium's ClearingSessionComments): stamps
+---deleted_at rather than removing rows, so an accidental clear stays
+---recoverable via direct storage access until storage.lua's hard-delete
+---sweep purges it past the retention window. Distinct from M.clear() above,
+---which removes the storage file itself -- the `:Review clear` reset path
+---for a stale schema.
+---@param callback fun(ok: boolean, err: string|nil)
+function M.clear_comments(callback)
+  local sql = "UPDATE review_comments SET deleted_at = now() WHERE deleted_at IS NULL RETURNING id;"
+
+  write(sql, function(ok, _, err)
+    if not ok then
+      callback(false, err)
+      return
+    end
+
+    M.reset()
+    callback(true, nil)
+  end)
 end
 
 return M
