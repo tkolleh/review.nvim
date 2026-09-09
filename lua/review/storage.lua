@@ -56,7 +56,11 @@ end
 ---@param rev string
 ---@return string
 local function short_rev(rev)
-  return rev:gsub("%^$", ""):sub(1, 8)
+  -- rev may be a ref name (e.g. "origin/main"), not just a SHA -- sanitize
+  -- like safe_branch below, or a "/" survives into the filename and splits
+  -- it into non-existent nested directories (DuckDB then fails to open it).
+  local sanitized = rev:gsub("%^$", ""):sub(1, 8):gsub("[^%w%-_]", "_")
+  return sanitized
 end
 
 ---@return table

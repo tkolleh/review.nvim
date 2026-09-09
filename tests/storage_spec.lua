@@ -33,6 +33,18 @@ describe("review.storage", function()
       assert.truthy(path:match("abcdef12_12345678%.duckdb$"))
     end)
 
+    it("sanitizes ref-name revisions so '/' can't split the path into nested directories", function()
+      -- Regression: a ref like "origin/main" (not a SHA) truncated to 8
+      -- chars was "origin/m", and that literal "/" survived into the
+      -- filename, splitting it into non-existent nested directories that
+      -- DuckDB then failed to open.
+      storage.set_revisions("origin/main", "origin/main")
+      local path = storage.get_storage_path()
+      -- The filename segment (after the last "/") must be exactly this --
+      -- no "/" fell through into it as an extra path separator.
+      assert.truthy(path:match("/[^/]-origin_m_origin_m%.duckdb$"))
+    end)
+
     it("returns branch path after clearing revisions", function()
       storage.set_revisions("abc12345^", "def67890")
       storage.clear_revisions()
