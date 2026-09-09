@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.0.0](https://github.com/tkolleh/review.nvim/compare/v3.0.1...v4.0.0) (2026-09-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **keymaps:** `codediff.readonly` config option removed — diff buffers are now always locked. Keymap config keys removed: `toggle_readonly`, `add_note`, `add_suggestion`, `add_issue`, `add_praise`, `readonly_add`, `readonly_delete`, `readonly_edit`, `readonly_add_file`, `next_file`, `prev_file`, `toggle_file_panel`. `:Review toggle` subcommand removed. Edit-mode's two-letter keymaps are renamed to single letters: `add_comment` (was `<localleader>cc`) is now `<localleader>c`, `add_file_comment` (was `<localleader>cf`) is now `<localleader>f`, `edit_comment` (was `<localleader>ce`) is now `<localleader>e`, `delete_comment` (was `<localleader>cd`) is now `<localleader>d`. File navigation and the panel toggle are now codediff.nvim's own `]f`/`[f` and `<leader>b` instead of review's `<Tab>`/`<S-Tab>`/`f`.
+
+### Features
+
+* **keymaps:** lock diff buffers unconditionally and collapse to single-letter comment keymaps ([198cf66](https://github.com/tkolleh/review.nvim/commit/198cf66f2c1c7e8d8e51d2261a2bf94ad737ba29))
+
+
+### Bug Fixes
+
+* **init:** don't crash closing a review when no session is active ([a343bb8](https://github.com/tkolleh/review.nvim/commit/a343bb8602e04c0c396bd0d92e22fa81725dea67))
+* **storage:** soft-delete comments instead of destroying the review database on &lt;C-r&gt; ([364b53d](https://github.com/tkolleh/review.nvim/commit/364b53dccc4d2cac316c5264e9f73fdc7b0e88ef))
+
+
+### Documentation
+
+* Simplify ([003757f](https://github.com/tkolleh/review.nvim/commit/003757f244925189205cc56b29f2fa12844be043))
+
 ## [3.0.1](https://github.com/tkolleh/review.nvim/compare/v3.0.0...v3.0.1) (2026-09-05)
 
 
