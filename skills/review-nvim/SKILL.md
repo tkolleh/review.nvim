@@ -77,6 +77,19 @@ specific line). Pass `--line` alone for a single-line comment, or `--line` +
 `--line-end` for a range. `--side` (`old`/`new`) only applies to line-scoped comments
 and defaults to `new`.
 
+Pass `--rev1`/`--rev2` (both required together) to read or add against a commit-range
+review's database instead of the current branch's — matching `:Review commits`'
+per-range storage scoping in `review.nvim` itself. Ref names (e.g. `origin/main`) and
+SHAs are both accepted:
+
+```bash
+python3 skills/review-nvim/main.py read --rev1 abc1234 --rev2 def5678
+
+python3 skills/review-nvim/main.py add \
+  --file src/foo.py --content "Regressed in this range." \
+  --author agent:claude-code --type issue --rev1 abc1234 --rev2 def5678
+```
+
 `--type` is one of `note`, `suggestion`, `issue`, `praise` — matching `review.nvim`'s
 own comment types; there is no fifth type and no free-text type.
 
@@ -105,9 +118,6 @@ don't scrape stderr or a traceback.
   (`expected_prior_content`) so a stale edit can't silently clobber another writer's
   change in between. That's real complexity this skill's conversational read/add use
   case doesn't need. If you need to change or remove a comment, do it from Neovim.
-- **No revision-range scope.** Only the per-branch storage path is supported; a review
-  session scoped to an explicit revision range (`storage.set_revisions` in
-  `review.nvim`) isn't handled.
 
 ## Source of truth
 

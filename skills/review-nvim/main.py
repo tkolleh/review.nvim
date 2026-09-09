@@ -147,17 +147,30 @@ def _sanitize_branch(branch):
     return "".join(c if (c.isalnum() or c in ("-", "_")) else "_" for c in branch)
 
 
-def get_storage_path():
+def _short_rev(rev):
+    # rev may be a ref name (e.g. "origin/main"), not just a SHA -- sanitize
+    # like _sanitize_branch, or a "/" survives into the filename and splits
+    # it into non-existent nested directories (DuckDB then fails to open
+    # it). Mirrors lua/review/storage.lua's short_rev -- keep both in sync.
+    rev = rev[:-1] if rev.endswith("^") else rev
+    return _sanitize_branch(rev[:8])
+
+
+def get_storage_path(rev1=None, rev2=None):
     git_root = _git_output(["rev-parse", "--show-toplevel"])
     if git_root is None:
         raise NoStoragePathError("not in a git repo (git rev-parse --show-toplevel failed)")
+
+    data_dir = os.path.expanduser("~/.local/share/nvim/review")
+    project_hash = _hash(git_root)
+
+    if rev1 and rev2:
+        return os.path.join(data_dir, f"{project_hash}-{_short_rev(rev1)}_{_short_rev(rev2)}.duckdb")
 
     branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"])
     if branch is None:
         raise NoStoragePathError("could not resolve current git branch (git rev-parse --abbrev-ref HEAD failed)")
 
-    data_dir = os.path.expanduser("~/.local/share/nvim/review")
-    project_hash = _hash(git_root)
     safe_branch = _sanitize_branch(branch)
     return os.path.join(data_dir, f"{project_hash}-{safe_branch}.duckdb")
 
@@ -176,7 +189,7 @@ def _ensure_schema_and_query(db_path, sql, readonly=False, retry=False):
 
 def cmd_read(args):
     try:
-        db_path = get_storage_path()
+        db_path = get_storage_path(args.rev1, args.rev2)
     except NoStoragePathError as e:
         print(json.dumps({"status": "error", "reason": str(e), "stage": "read"}))
         sys.exit(1)
@@ -201,7 +214,7 @@ def cmd_read(args):
 
 def cmd_add(args):
     try:
-        db_path = get_storage_path()
+        db_path = get_storage_path(args.rev1, args.rev2)
     except NoStoragePathError as e:
         print(json.dumps({"status": "error", "reason": str(e), "stage": "add"}))
         sys.exit(1)
@@ -231,6 +244,8 @@ def main():
     read_parser = subparsers.add_parser("read", help="Read comments from the current branch's review database")
     read_parser.add_argument("--file", type=str, default=None, help="Filter to comments on this file path")
     read_parser.add_argument("--author", type=str, default=None, help="Filter to comments by this author")
+    read_parser.add_argument("--rev1", type=str, default=None, help="Start of a commit-range session (requires --rev2); scopes to that range's database instead of the current branch's")
+    read_parser.add_argument("--rev2", type=str, default=None, help="End of a commit-range session (requires --rev1)")
     read_parser.set_defaults(func=cmd_read)
 
     add_parser = subparsers.add_parser("add", help="Add a comment to the current branch's review database")
@@ -241,9 +256,20 @@ def main():
     add_parser.add_argument("--line", type=int, default=None, help="Start line (omit for a file-scope comment)")
     add_parser.add_argument("--line-end", type=int, default=None, help="End line, for a line-range comment")
     add_parser.add_argument("--side", type=str, default=None, choices=["old", "new"], help="Diff side (line-scope only; defaults to 'new')")
+    add_parser.add_argument("--rev1", type=str, default=None, help="Start of a commit-range session (requires --rev2); scopes to that range's database instead of the current branch's")
+    add_parser.add_argument("--rev2", type=str, default=None, help="End of a commit-range session (requires --rev1)")
     add_parser.set_defaults(func=cmd_add)
 
     args = parser.parse_args()
+
+    # Unlike storage.lua's M.set_revisions (only ever called by review.nvim's own
+    # commit-picker with both values already resolved together), --rev1/--rev2 here
+    # are independent CLI flags an agent can mistype -- silently falling back to the
+    # branch-scoped database on exactly one of them being set would misfile a
+    # comment into the wrong review's storage with no warning.
+    if bool(args.rev1) != bool(args.rev2):
+        parser.error("--rev1 and --rev2 must be given together")
+
     args.func(args)
 
 
