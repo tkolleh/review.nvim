@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.1.0](https://github.com/tkolleh/review.nvim/compare/v4.0.0...v4.1.0) (2026-09-09)
+
+
+### Features
+
+* **review-nvim-skill:** add revision-range scope to main.py ([857f940](https://github.com/tkolleh/review.nvim/commit/857f940a109779563c3e6828ab584e6939997f70))
+
+
+### Bug Fixes
+
+* **storage:** sanitize ref-name revisions in short_rev ([10557cc](https://github.com/tkolleh/review.nvim/commit/10557cc941d9d26dbfca898c457e2951c84fe4fd))
+
 ## [4.0.0](https://github.com/tkolleh/review.nvim/compare/v3.0.1...v4.0.0) (2026-09-09)
 
 
