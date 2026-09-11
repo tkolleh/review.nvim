@@ -25,7 +25,7 @@ local sync_timer = nil
 ---unrelated editing (georgeguimaraes/review.nvim#38).
 local prior_editability = {}
 
-local SYNC_POLL_INTERVAL_MS = 3000
+local SYNC_POLL_INTERVAL_MS = 1000
 
 local function start_sync_timer()
   if sync_timer then
