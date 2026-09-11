@@ -72,10 +72,12 @@ rule PlacingCommentForSelection {
     )
 }
 
--- Unlike line comments, a file only ever has one file-level comment at a
--- time: a second "file comment" action on a file that already has one
--- edits the existing comment instead of creating a second (comments.lua's
--- file_comment()).
+-- Unlike line comments, a file only ever has one file-level comment per
+-- author at a time: a second "file comment" action by the same author on a
+-- file that already has one from them edits the existing comment instead
+-- of creating a second -- another author's file comment on the same file
+-- is untouched (comments.lua's file_comment(), scoped by store.lua's
+-- get_file_comment(file, author)).
 rule PlacingFileComment {
     when: AuthorPlacesFileComment(author, session, file, comment_type, content)
     requires: not exists storage/Comment{session: session, file_path: file, scope: file, author: author}
@@ -228,5 +230,3 @@ surface ReviewWorkflow {
         AuthorSendsCommentsToSidekick(author, session)
         AuthorClearsComments(author, session)
 }
-
-open question "comments.lua's file_comment() looks up the file's existing file-level comment by file_path alone, not by (file_path, author) -- so PlacingFileComment's precondition above (one file-level comment per author per file, mirroring storage's IndependentWritersDoNotCollide guarantee applying uniformly across all comment scopes) does not match current behaviour, which allows at most one file-level comment per file total, shared and silently re-targeted for editing across authors regardless of who created it. Confirm which is intended before treating either as the spec of record -- see the weed pass for the corresponding code reference and the divergence this creates against IndependentWritersDoNotCollide's NoClobber guarantee."
