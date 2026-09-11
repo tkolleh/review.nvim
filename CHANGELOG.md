@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/tkolleh/review.nvim/compare/v4.1.0...v4.2.0) (2026-09-11)
+
+
+### Features
+
+* Reduce polling time ([9192498](https://github.com/tkolleh/review.nvim/commit/9192498421a9749dba047588ccfafd876b9b0538))
+
 ## [4.1.0](https://github.com/tkolleh/review.nvim/compare/v4.0.0...v4.1.0) (2026-09-09)
 
 
