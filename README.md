@@ -11,7 +11,7 @@ review.nvim reviews local diffs (working tree, commits, revision ranges) — it 
 ## Features
 
 - Add comments to specific lines in diff view (Note, Suggestion, Issue, Praise)
-- Comment box borders are colored deterministically per author (derived from a hash of the author string), so you can tell at a glance whose comment is whose — always on, and adapts automatically to `:set background`
+- Comment box borders are colored deterministically per author, so you can tell at a glance whose comment is whose — always on, and adapts automatically to `:set background`
 - Comments persist per branch in a local DuckDB file (Neovim's XDG data directory: `~/.local/share/nvim/review/`), safe for multiple writers (e.g. you and an AI agent) commenting concurrently
 - An AI agent can read and add comments in that same file directly via a bundled [skill](skills/review-nvim) — no need to open Neovim to join the review
 - Auto-export comments to clipboard when closing
@@ -64,7 +64,7 @@ Using lazy.nvim:
 
 ## Workflow
 
-Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). The diff opens in a new tab, locked against edits, with a file panel on the left.
+Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). To diff your working tree against an arbitrary ref (e.g. `origin/master`), run codediff directly with `:CodeDiff origin/master` — review's keymaps attach to any codediff session, not just ones `:Review` opens. The diff opens in a new tab, locked against edits, with a file panel on the left.
 
 Navigate with codediff's `]f`/`[f` (files), `<leader>b` (file panel), `t` (side-by-side/inline), `<C-w>h`/`<C-w>l` (old/new pane). Press `<localleader>c` on a line to comment; pick a type (note, suggestion, issue, praise) from the menu. The comment renders as a box below the line with a sign in the gutter.
 
@@ -79,7 +79,7 @@ Press `q` to close the review — this copies all comments to the clipboard as s
 2. **[SUGGESTION]** `src/utils.ts:~10` - The old implementation was cleaner
 ```
 
-A `~` prefix means the old (left) side of the diff. Comments persist per branch and survive closing Neovim, expiring after 7 days. Storage is DuckDB, not a flat file, so another writer — a teammate on the same branch, or an AI agent — can comment on the same session concurrently without clobbering yours.
+A `~` prefix means the old (left) side of the diff. Comments persist per branch and survive closing Neovim, expiring after 7 days.
 
 Each comment's author border color is computed by DuckDB itself at insert time (a `GENERATED ALWAYS AS` column hashing the author string into a fixed, WCAG-validated palette) — not by Neovim — so it's consistent for any reader of the storage file. Because DuckDB can't add a generated column to an existing table, this only applies to sessions created after upgrading; run `:Review clear` to reset an older session's storage file if its comments don't show author colors.
 
