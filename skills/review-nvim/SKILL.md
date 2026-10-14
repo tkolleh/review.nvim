@@ -123,8 +123,8 @@ don't scrape stderr or a traceback.
 
 This skill's schema, path derivation, and SQL must stay consistent with
 `review.nvim`'s own storage layer. If `review.nvim`'s schema or path scheme ever
-changes, re-derive this skill's `main.py` from these files, relative to this repo's
-root:
+changes, re-derive this skill's `main.py` from the following files (paths are
+relative to the repo root):
 
 - `lua/review/duckdb.lua` — CLI invocation contract, lock-contention retry.
 - `lua/review/storage.lua` — storage path derivation, schema DDL.
