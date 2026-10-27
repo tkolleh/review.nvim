@@ -17,9 +17,11 @@ direction shifted toward general-purpose multi-author commenting.
 - Loading persisted comments is async: `store.sync_from_storage(callback)` (renamed from
   `store.load()`; grep for `store.load(` before trusting a remaining caller).
 - DB files live in `~/.local/share/nvim/review/{project-hash}-{branch}.duckdb`, scoped per git
-  branch or explicit revision range (`storage.set_revisions`).
-- `review_comments.color_dark`/`color_light` are `GENERATED ALWAYS AS` columns; the schema is
-  mirrored in `skills/review-nvim/main.py`'s `SCHEMA_SQL` — keep both in sync.
+  branch or explicit revision range (`storage.set_revisions`, which resolves keys once: a literal
+  REV2 `HEAD` keys on the branch; other HEAD-relative revs and SHAs on the short SHA; ref names whole).
+  `:Review merge-base` resolves `git merge-base`, then reuses the range flow.
+- `review_comments.color_dark`/`color_light` are `GENERATED ALWAYS AS` columns. The schema and the
+  key logic are mirrored in `skills/review-nvim/main.py` (`SCHEMA_SQL`, `_rev_key`) — keep in sync.
 - `specs/review-storage.allium` is the behavioural spec for storage; consult it before changing
   `storage.lua`/`duckdb.lua` semantics. `docs/research/` is background, not authoritative.
 

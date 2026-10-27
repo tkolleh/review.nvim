@@ -2,7 +2,7 @@
 
 Code review annotations optimized for AI feedback loops.
 
-> **This is a hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim), diverged as of `v2.0.0`. The storage layer was rewritten from a flat per-branch JSON file to a DuckDB-backed, multi-writer-safe design, and the project's direction has shifted toward being a more general-purpose multi-author commenting tool rather than a single-reviewer annotation layer.
+> **Hard fork** of [georgeguimaraes/review.nvim](https://github.com/georgeguimaraes/review.nvim) as of `v2.0.0`: storage was rewritten onto DuckDB (multi-writer safe), and the focus is now general-purpose multi-author commenting.
 
 ## Scope
 
@@ -11,9 +11,9 @@ review.nvim reviews local diffs (working tree, commits, revision ranges) — it 
 ## Features
 
 - Add comments to specific lines in diff view (Note, Suggestion, Issue, Praise)
-- Comment box borders are colored deterministically per author, so you can tell at a glance whose comment is whose — always on, and adapts automatically to `:set background`
-- Comments persist per branch in a local DuckDB file (Neovim's XDG data directory: `~/.local/share/nvim/review/`), safe for multiple writers (e.g. you and an AI agent) commenting concurrently
-- An AI agent can read and add comments in that same file directly via a bundled [skill](skills/review-nvim) — no need to open Neovim to join the review
+- Comment borders are colored per author and adapt to `:set background`
+- Comments persist per branch in a local DuckDB file (`~/.local/share/nvim/review/`), safe for concurrent writers (e.g. you and an AI agent)
+- An AI agent can read and add comments in that file via a bundled [skill](skills/review-nvim), without opening Neovim
 - Auto-export comments to clipboard when closing
 - Send comments directly to [sidekick.nvim](https://github.com/folke/sidekick.nvim) for AI chat
 - Commit picker modal to select specific commits to review
@@ -54,7 +54,7 @@ Using lazy.nvim:
 :Review commits      " Select commits to review (picker modal)
 :Review commits SHA  " Review a single commit (diffs SHA^ against SHA)
 :Review commits REV1 REV2  " Review specific revision range (skips picker)
-:Review merge-base REV1 [REV2]  " Review only what REV2 (default HEAD) adds since its merge base with REV1, like a PR
+:Review merge-base REV1 [REV2]  " Review REV2 (default HEAD) since its merge base with REV1, like a PR
 :Review close        " Close and export comments to clipboard
 :Review export       " Export comments to clipboard
 :Review preview      " Preview exported markdown in split
@@ -65,7 +65,7 @@ Using lazy.nvim:
 
 ## Workflow
 
-Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). To diff your working tree against an arbitrary ref (e.g. `origin/master`), run codediff directly with `:CodeDiff origin/master` — review's keymaps attach to any codediff session, not just ones `:Review` opens. The diff opens in a new tab, locked against edits, with a file panel on the left.
+Open a review with `:Review` (staged/unstaged changes) or `:Review commits` (pick specific commits). For a PR-style review run `:Review merge-base origin/main`; to diff the working tree against any ref, run `:CodeDiff REF` — review's keymaps attach to any codediff session. The diff opens in a new tab, locked against edits, with a file panel on the left.
 
 Navigate with codediff's `]f`/`[f` (files), `<leader>b` (file panel), `t` (side-by-side/inline), `<C-w>h`/`<C-w>l` (old/new pane). Press `<localleader>c` on a line to comment; pick a type (note, suggestion, issue, praise) from the menu. The comment renders as a box below the line with a sign in the gutter.
 
@@ -73,81 +73,46 @@ Visually select a range before `<localleader>c` for a multi-line comment, or pre
 
 Use `]n`/`[n` to jump between comments, `<localleader>e` to edit, `<localleader>d` to delete, `c` to list and jump to any comment.
 
-Press `q` to close the review — this copies all comments to the clipboard as structured markdown and shows a preview, ready to paste into Claude Code, sidekick.nvim (`S`), or any AI chat:
+Press `q` to close the review — this copies all comments to the clipboard as structured markdown (see [Export Format](#export-format)) and shows a preview, ready to paste into Claude Code, sidekick.nvim (`S`), or any AI chat. Comments persist per branch and survive closing Neovim, expiring after 7 days.
 
-```
-1. **[ISSUE]** `src/api.ts:23` - This endpoint doesn't handle errors
-2. **[SUGGESTION]** `src/utils.ts:~10` - The old implementation was cleaner
-```
-
-A `~` prefix means the old (left) side of the diff. Comments persist per branch and survive closing Neovim, expiring after 7 days.
-
-Each comment's author border color is computed by DuckDB itself at insert time (a `GENERATED ALWAYS AS` column hashing the author string into a fixed, WCAG-validated palette) — not by Neovim — so it's consistent for any reader of the storage file. Because DuckDB can't add a generated column to an existing table, this only applies to sessions created after upgrading; run `:Review clear` to reset an older session's storage file if its comments don't show author colors.
+Author border colors are computed by DuckDB (a `GENERATED ALWAYS AS` column), so they only apply to sessions created after upgrading; run `:Review clear` to reset an older session file.
 
 ## Agent comments
 
-An AI agent can join the review directly from the CLI, reading and adding comments in the same
-DuckDB file this plugin uses — no need to open Neovim. Comments an agent adds show up in your
-next `:Review` session, and comments you leave are visible to the agent's next read, so a human
-and an agent can converse in the same review thread.
-
-This is bundled as an Agent Skill at [`skills/review-nvim`](skills/review-nvim); see its
-[SKILL.md](skills/review-nvim/SKILL.md) for usage. Install it with [`npx skills`](https://skills.sh):
+An AI agent can read and add comments in the same DuckDB file from the CLI, so you and an agent can converse in one review thread without opening Neovim. Install the bundled [skill](skills/review-nvim) with [`npx skills`](https://skills.sh):
 
 ```bash
 npx skills@latest add https://github.com/tkolleh/review.nvim/tree/main/skills/review-nvim
 ```
 
-## Keybindings (in diff view)
+## Keybindings and configuration (in diff view)
 
-The diff is always locked against edits, so review.nvim's own keys never shadow a Vim motion:
-| Key | Action |
-|-----|--------|
-| `<localleader>c` | Add comment (pick type from menu) |
-| `<localleader>f` | Add file-level comment |
-| `<localleader>e` | Edit comment at cursor |
-| `<localleader>d` | Delete comment at cursor |
-| `]n` / `[n` | Jump to next/previous comment |
-| `c` | List all comments |
-| `C` | Export to clipboard and show preview |
-| `S` | Send comments to sidekick.nvim |
-| `<C-r>` | Clear all comments |
-| `q` | Close and export comments to clipboard |
-| `?` | Show review.nvim keymap help |
+The diff is always locked against edits, so review.nvim's own keys never shadow a Vim motion. Each key is an option under `opts.keymaps`; set it to `false` to disable it.
+
+| Key | Option | Action |
+|-----|--------|--------|
+| `<localleader>c` | `add_comment` | Add comment (pick type from menu) |
+| `<localleader>f` | `add_file_comment` | Add file-level comment |
+| `<localleader>e` | `edit_comment` | Edit comment at cursor |
+| `<localleader>d` | `delete_comment` | Delete comment at cursor |
+| `]n` / `[n` | `next_comment` / `prev_comment` | Jump to next/previous comment |
+| `c` | `list_comments` | List all comments |
+| `C` | `export_clipboard` | Export to clipboard and show preview |
+| `S` | `send_sidekick` | Send comments to sidekick.nvim |
+| `<C-r>` | `clear_comments` | Clear all comments |
+| `q` | `close` | Close and export comments to clipboard |
+| `?` | `show_help` | Show review.nvim keymap help |
 
 Courtesy of codediff.nvim itself: `]f`/`[f` (next/previous file), `<leader>b` (toggle file panel),
 `t` (toggle side-by-side/inline layout), `g?` (codediff help).
 
 **Comment popup** (when adding/editing):
-| Key | Action |
-|-----|--------|
-| `Enter` | Insert newline (multi-line comments supported) |
-| `Ctrl+s` | Submit comment |
-| `Tab` | Cycle comment type |
-| `Esc` / `q` | Cancel (normal mode) |
-
-## Configuration
-
-All keymaps can be set to `false` to disable them.
-
-**Keymap options**
-| Option | Default | Action |
-|--------|---------|--------|
-| `add_comment` | `<localleader>c` | Add comment, pick type |
-| `add_file_comment` | `<localleader>f` | Add file-level comment |
-| `edit_comment` | `<localleader>e` | Edit comment |
-| `delete_comment` | `<localleader>d` | Delete comment |
-| `next_comment` | `]n` | Next comment |
-| `prev_comment` | `[n` | Previous comment |
-| `list_comments` | `c` | List all comments |
-| `export_clipboard` | `C` | Export to clipboard |
-| `send_sidekick` | `S` | Send comments to sidekick |
-| `clear_comments` | `<C-r>` | Clear all comments |
-| `close` | `q` | Close and export |
-| `show_help` | `?` | Show review.nvim keymap help |
-| `popup_submit` | `<C-s>` | Submit comment (popup, insert & normal) |
-| `popup_cancel` | `q` | Cancel comment (popup, normal mode) |
-| `popup_cycle_type` | `<Tab>` | Cycle comment type (popup) |
+| Key | Option | Action |
+|-----|--------|--------|
+| `Enter` | — | Insert newline (multi-line comments supported) |
+| `Ctrl+s` | `popup_submit` | Submit comment |
+| `Tab` | `popup_cycle_type` | Cycle comment type |
+| `Esc` / `q` | `popup_cancel` | Cancel (normal mode) |
 
 
 ## Export Format
