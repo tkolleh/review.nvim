@@ -53,14 +53,36 @@ local function hash(str)
   return string.format("%x", h)
 end
 
+-- A literal "HEAD" names a different commit per branch, so keying on it would
+-- make every branch share one comment file. Key on the branch instead; fall
+-- back to the short SHA when detached (abbrev-ref prints "HEAD" there).
+---@return string
+local function head_key()
+  local branch = get_git_branch()
+  if branch and branch ~= "HEAD" then
+    return branch
+  end
+  local handle = io.popen("git rev-parse --short=8 HEAD 2>/dev/null")
+  local sha = handle and handle:read("*a") or ""
+  if handle then
+    handle:close()
+  end
+  sha = sha:gsub("%s+$", "")
+  return sha ~= "" and sha or "HEAD"
+end
+
 ---@param rev string
 ---@return string
 local function short_rev(rev)
-  -- rev may be a ref name (e.g. "origin/main"), not just a SHA -- sanitize
-  -- like safe_branch below, or a "/" survives into the filename and splits
-  -- it into non-existent nested directories (DuckDB then fails to open it).
-  local sanitized = rev:gsub("%^$", ""):sub(1, 8):gsub("[^%w%-_]", "_")
-  return sanitized
+  local stripped = rev:gsub("%^$", "")
+  local resolved = stripped == "HEAD" and head_key() or stripped
+  -- Only SHAs are shortened: truncating a ref name makes distinct refs
+  -- collide ("origin/main" and "origin/master" both became "origin_m").
+  local shortened = resolved:match("^%x+$") and resolved:sub(1, 8) or resolved
+  -- rev may be a ref name (e.g. "origin/main") -- sanitize like safe_branch
+  -- below, or a "/" survives into the filename and splits it into
+  -- non-existent nested directories (DuckDB then fails to open it).
+  return (shortened:gsub("[^%w%-_]", "_"))
 end
 
 ---@return table
