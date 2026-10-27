@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.3.0](https://github.com/tkolleh/review.nvim/compare/v4.2.0...v4.3.0) (2026-10-27)
+
+
+### Features
+
+* add :Review merge-base subcommand ([7b328c1](https://github.com/tkolleh/review.nvim/commit/7b328c1a4780eb414190add4d74027d45d5ce77e))
+* add :Review merge-base subcommand ([46209f4](https://github.com/tkolleh/review.nvim/commit/46209f49534c33f0f4f99963e1a2aaf5d38b2d90))
+
+
+### Bug Fixes
+
+* key revision-range storage on branch for HEAD and keep ref names whole ([49209ca](https://github.com/tkolleh/review.nvim/commit/49209ca16d4d24da8e2c88ff5409c9be83cbe74b))
+* pin HEAD-relative revisions and harden merge-base input ([bf5fbe4](https://github.com/tkolleh/review.nvim/commit/bf5fbe44d70ab33a7ca7e8aaae2a552307fb52cb))
+
 ## [4.2.0](https://github.com/tkolleh/review.nvim/compare/v4.1.0...v4.2.0) (2026-09-11)
 
 
