@@ -54,6 +54,7 @@ Using lazy.nvim:
 :Review commits      " Select commits to review (picker modal)
 :Review commits SHA  " Review a single commit (diffs SHA^ against SHA)
 :Review commits REV1 REV2  " Review specific revision range (skips picker)
+:Review merge-base REV1 [REV2]  " Review only what REV2 (default HEAD) adds since its merge base with REV1, like a PR
 :Review close        " Close and export comments to clipboard
 :Review export       " Export comments to clipboard
 :Review preview      " Preview exported markdown in split

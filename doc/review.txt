@@ -54,6 +54,16 @@ All commands use the `:Review` prefix.
                             Review a specific revision range directly,
                             skipping the picker.
 
+                                                           *:Review-merge-base*
+:Review merge-base {rev1} [{rev2}]
+                            Review only the changes {rev2} (default `HEAD`)
+                            introduces since its merge base with {rev1}, like
+                            a pull request. Unlike `:Review commits {rev1}
+                            {rev2}`, commits that landed on {rev1} after you
+                            branched are not shown. Example: >
+                                :Review merge-base origin/master
+<
+
                                                                *:Review-close*
 :Review close               Export comments to clipboard and close the
                             review tab.
