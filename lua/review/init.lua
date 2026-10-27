@@ -163,6 +163,55 @@ function M.open_commits(rev1, rev2)
   end)
 end
 
+---@alias review.MergeBaseResult {ok: true, sha: string}|{ok: false, err: string}
+
+-- Plain `git merge-base` (not --fork-point, which depends on a local reflog
+-- that gc can expire). Exit 1 with empty stdout means unrelated histories.
+---@param rev1 string
+---@param rev2 string
+---@return review.MergeBaseResult
+function M.resolve_merge_base(rev1, rev2)
+  -- A leading "-" would be parsed as a git option (--all, --is-ancestor, ...).
+  for _, rev in ipairs({ rev1, rev2 }) do
+    if rev:sub(1, 1) == "-" then
+      return { ok = false, err = "invalid revision: " .. rev }
+    end
+  end
+  local ran, done = pcall(function()
+    return vim.system({ "git", "merge-base", rev1, rev2 }, { text = true, timeout = 5000 }):wait()
+  end)
+  if not ran then
+    return { ok = false, err = "could not run git: " .. tostring(done) }
+  end
+  local sha = vim.trim(done.stdout or "")
+  if done.code == 0 and sha ~= "" then
+    return { ok = true, sha = sha }
+  end
+  if done.code == 1 then
+    return { ok = false, err = string.format("no common ancestor between %s and %s", rev1, rev2) }
+  end
+  local stderr = vim.trim(done.stderr or "")
+  return { ok = false, err = stderr ~= "" and stderr or "git merge-base failed" }
+end
+
+---Reviews only what `rev2` (default HEAD) adds on top of its merge base with `rev1`,
+---like a pull request, instead of a tip-to-tip diff that also shows `rev1`'s own commits.
+---@param rev1 string|nil
+---@param rev2 string|nil
+function M.open_merge_base(rev1, rev2)
+  if not rev1 then
+    vim.notify("Usage: :Review merge-base REV1 [REV2]", vim.log.levels.WARN, { title = "review.nvim" })
+    return
+  end
+  local target = rev2 or "HEAD"
+  local result = M.resolve_merge_base(rev1, target)
+  if not result.ok then
+    vim.notify(result.err, vim.log.levels.ERROR, { title = "review.nvim" })
+    return
+  end
+  open_codediff_with_revisions(result.sha, target)
+end
+
 function M.close()
   if not hooks.get_current_tabpage() then
     vim.notify("No active review session", vim.log.levels.WARN, { title = "review.nvim" })

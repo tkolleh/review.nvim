@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -147,13 +148,36 @@ def _sanitize_branch(branch):
     return "".join(c if (c.isalnum() or c in ("-", "_")) else "_" for c in branch)
 
 
-def _short_rev(rev):
-    # rev may be a ref name (e.g. "origin/main"), not just a SHA -- sanitize
-    # like _sanitize_branch, or a "/" survives into the filename and splits
-    # it into non-existent nested directories (DuckDB then fails to open
-    # it). Mirrors lua/review/storage.lua's short_rev -- keep both in sync.
-    rev = rev[:-1] if rev.endswith("^") else rev
-    return _sanitize_branch(rev[:8])
+def _rev_parse_short(rev):
+    # argv form (no shell); a leading "-" would be parsed as a git option.
+    if rev.startswith("-"):
+        return None
+    return _git_output(["rev-parse", "--verify", "--quiet", "--short=8", rev + "^{commit}"])
+
+
+def _head_key():
+    branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"])
+    if branch and branch != "HEAD":
+        return branch
+    return _rev_parse_short("HEAD") or "HEAD"
+
+
+def _rev_key(rev, is_tip):
+    # Mirrors lua/review/storage.lua's rev_key -- keep both in sync. A literal
+    # REV2 "HEAD" follows the branch; HEAD-relative revs elsewhere and all-hex
+    # names resolve through git; other ref names stay whole (truncating made
+    # "origin/main" and "origin/master" collide).
+    stripped = rev[:-1] if rev.endswith("^") else rev
+    is_hex = re.fullmatch(r"[0-9a-fA-F]+", stripped) is not None
+    if is_tip and stripped == "HEAD":
+        base = _head_key()
+    elif stripped.startswith("HEAD") or is_hex:
+        base = _rev_parse_short(stripped) or (stripped[:8] if is_hex and len(stripped) >= 7 else stripped)
+    else:
+        base = stripped
+    # Sanitize so a "/" in a ref name can't split the filename into
+    # non-existent nested directories (DuckDB then fails to open it).
+    return _sanitize_branch(base)
 
 
 def get_storage_path(rev1=None, rev2=None):
@@ -165,7 +189,7 @@ def get_storage_path(rev1=None, rev2=None):
     project_hash = _hash(git_root)
 
     if rev1 and rev2:
-        return os.path.join(data_dir, f"{project_hash}-{_short_rev(rev1)}_{_short_rev(rev2)}.duckdb")
+        return os.path.join(data_dir, f"{project_hash}-{_rev_key(rev1, False)}_{_rev_key(rev2, True)}.duckdb")
 
     branch = _git_output(["rev-parse", "--abbrev-ref", "HEAD"])
     if branch is None:

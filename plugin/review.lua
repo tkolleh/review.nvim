@@ -6,6 +6,7 @@ vim.g.loaded_review = true
 local subcommands = {
   open = { fn = function() require("review").open() end, desc = "Open codediff with review" },
   commits = { fn = function(args) require("review").open_commits(args[1], args[2]) end, desc = "Select commits to review (optional: SHA or rev1 rev2)" },
+  ["merge-base"] = { fn = function(args) require("review").open_merge_base(args[1], args[2]) end, desc = "Review changes since the merge base of REV1 and REV2 (REV2 defaults to HEAD)" },
   close = { fn = function() require("review").close() end, desc = "Close and export to clipboard" },
   export = { fn = function() require("review").export() end, desc = "Export comments to clipboard" },
   preview = { fn = function() require("review").preview() end, desc = "Preview exported markdown" },

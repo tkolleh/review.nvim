@@ -4,6 +4,7 @@
 :Review-commits	review.txt	/*:Review-commits*
 :Review-export	review.txt	/*:Review-export*
 :Review-list	review.txt	/*:Review-list*
+:Review-merge-base	review.txt	/*:Review-merge-base*
 :Review-preview	review.txt	/*:Review-preview*
 :Review-sidekick	review.txt	/*:Review-sidekick*
 review-commands	review.txt	/*review-commands*

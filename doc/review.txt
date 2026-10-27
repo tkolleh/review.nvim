@@ -23,9 +23,7 @@ comments (note, suggestion, issue, praise) on lines in a diff view, then
 export them to clipboard or sidekick.nvim for AI chat. See the README for
 full feature list and workflow: https://github.com/tkolleh/review.nvim
 
-This is a hard fork of georgeguimaraes/review.nvim (v2.0.0), rewriting the
-storage layer onto DuckDB for multi-writer support and shifting direction
-toward general-purpose multi-author commenting. See the README for details.
+Hard fork of georgeguimaraes/review.nvim (v2.0.0) with DuckDB storage.
 
 ==============================================================================
 2. REQUIREMENTS                                          *review-requirements*
@@ -53,6 +51,15 @@ All commands use the `:Review` prefix.
 :Review commits {rev1} {rev2}
                             Review a specific revision range directly,
                             skipping the picker.
+
+                                                           *:Review-merge-base*
+:Review merge-base {rev1} [{rev2}]
+                            Review {rev2} (default `HEAD`) since its merge
+                            base with {rev1}, like a pull request: commits
+                            that landed on {rev1} after you branched are not
+                            shown. Example: >
+                                :Review merge-base origin/main
+<
 
                                                                *:Review-close*
 :Review close               Export comments to clipboard and close the
@@ -204,16 +211,18 @@ surrounding code context. Use `:Review export` to preview.
 
 Comments are stored in a DuckDB file per branch or revision range: >
     ~/.local/share/nvim/review/{project-hash}-{branch}.duckdb
+    ~/.local/share/nvim/review/{project-hash}-{rev1}_{rev2}.duckdb
 <
-Safe for concurrent writers (you, a teammate, an AI agent). Sessions expire
-after 7 days. See the README's Features section for details.
+A literal {rev2} of `HEAD` is keyed on the current branch (short SHA when
+detached); other HEAD-relative revisions and SHAs by short SHA, ref names by
+name.
 
-The `review_comments` table has `color_dark`/`color_light` columns,
-GENERATED ALWAYS AS columns that DuckDB computes at insert time by hashing
-the `author` column into a fixed palette. Since DuckDB cannot add a
-generated column to an already-existing table, this only takes effect for
-sessions created after upgrading -- run `:Review-clear` to reset an older
-session's storage file if it's missing author colors.
+Safe for concurrent writers (you, a teammate, an AI agent). Sessions expire
+after 7 days.
+
+`color_dark`/`color_light` are GENERATED ALWAYS AS columns DuckDB computes at
+insert time from `author`. DuckDB cannot add them to an existing table, so
+run `:Review clear` to reset an older session file that lacks author colors.
 
 ==============================================================================
  vim:tw=78:ts=8:ft=help:norl:

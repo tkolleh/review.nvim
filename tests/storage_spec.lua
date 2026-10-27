@@ -7,11 +7,17 @@ describe("review.storage", function()
 
   describe("get_storage_path", function()
     it("returns branch-scoped path when no revisions set", function()
+      -- Compare against a known range path rather than asserting "no '_'":
+      -- a branch like "feat/x" sanitizes to "feat_x", which has one.
       storage.clear_revisions()
-      local path = storage.get_storage_path()
-      assert.is_not_nil(path)
-      assert.is_nil(path:match("_"))
-      assert.truthy(path:match("%.duckdb$"))
+      local branch_path = storage.get_storage_path()
+      storage.set_revisions("abc12345", "def67890")
+      local range_path = storage.get_storage_path()
+      storage.clear_revisions()
+      assert.is_not_nil(branch_path)
+      assert.truthy(branch_path:match("%.duckdb$"))
+      assert.are_not.equal(branch_path, range_path)
+      assert.is_nil(branch_path:match("abc12345_def67890"))
     end)
 
     it("returns revision-scoped path when revisions are set", function()
@@ -42,7 +48,15 @@ describe("review.storage", function()
       local path = storage.get_storage_path()
       -- The filename segment (after the last "/") must be exactly this --
       -- no "/" fell through into it as an extra path separator.
-      assert.truthy(path:match("/[^/]-origin_m_origin_m%.duckdb$"))
+      assert.truthy(path:match("/[^/]-origin_main_origin_main%.duckdb$"))
+    end)
+
+    it("keeps distinct ref names distinct instead of truncating them", function()
+      storage.set_revisions("origin/main", "abc12345")
+      local main_path = storage.get_storage_path()
+      storage.set_revisions("origin/master", "abc12345")
+      local master_path = storage.get_storage_path()
+      assert.are_not.equal(main_path, master_path)
     end)
 
     it("returns branch path after clearing revisions", function()
