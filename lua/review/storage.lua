@@ -6,12 +6,10 @@ local duckdb = require("review.duckdb")
 -- dir; sharing the real XDG path would hit DuckDB's single-writer lock.
 local data_dir = os.getenv("REVIEW_NVIM_TEST_DATA_DIR") or (vim.fn.stdpath("data") .. "/review")
 
----@type {rev1: string, rev2: string}|nil
+-- Filename-safe keys resolved once in set_revisions, so a checkout mid-session
+-- can't send later writes to a different file than the earlier loads.
+---@type {key1: string, key2: string}|nil
 local current_revisions = nil
-
-function M.set_revisions(rev1, rev2)
-  current_revisions = (rev1 and rev2) and { rev1 = rev1, rev2 = rev2 } or nil
-end
 
 function M.clear_revisions()
   current_revisions = nil
@@ -53,8 +51,21 @@ local function hash(str)
   return string.format("%x", h)
 end
 
--- A literal "HEAD" names a different commit per branch, so keying on it would
--- make every branch share one comment file. Key on the branch instead; fall
+-- argv form (no shell): rev comes from the user. Nil if it isn't a commit.
+---@param rev string
+---@return string|nil
+local function rev_parse_short(rev)
+  if rev:sub(1, 1) == "-" then
+    return nil
+  end
+  local ok, done = pcall(function()
+    return vim.system({ "git", "rev-parse", "--verify", "--quiet", "--short=8", rev .. "^{commit}" }, { text = true, timeout = 5000 }):wait()
+  end)
+  local sha = ok and vim.trim(done.stdout or "") or ""
+  return (ok and done.code == 0 and sha ~= "") and sha or nil
+end
+
+-- The moving tip: follow the branch so comments survive new commits; fall
 -- back to the short SHA when detached (abbrev-ref prints "HEAD" there).
 ---@return string
 local function head_key()
@@ -62,27 +73,36 @@ local function head_key()
   if branch and branch ~= "HEAD" then
     return branch
   end
-  local handle = io.popen("git rev-parse --short=8 HEAD 2>/dev/null")
-  local sha = handle and handle:read("*a") or ""
-  if handle then
-    handle:close()
-  end
-  sha = sha:gsub("%s+$", "")
-  return sha ~= "" and sha or "HEAD"
+  return rev_parse_short("HEAD") or "HEAD"
 end
 
+-- `is_tip` is true only for the end of the range: a literal "HEAD" there
+-- follows the branch, while HEAD-relative revs elsewhere (e.g. the "HEAD^"
+-- that `:Review commits HEAD` builds) pin to a commit so each reviewed commit
+-- keeps its own file. Ref names stay whole: truncating made "origin/main" and
+-- "origin/master" collide.
 ---@param rev string
+---@param is_tip boolean
 ---@return string
-local function short_rev(rev)
+local function rev_key(rev, is_tip)
   local stripped = rev:gsub("%^$", "")
-  local resolved = stripped == "HEAD" and head_key() or stripped
-  -- Only SHAs are shortened: truncating a ref name makes distinct refs
-  -- collide ("origin/main" and "origin/master" both became "origin_m").
-  local shortened = resolved:match("^%x+$") and resolved:sub(1, 8) or resolved
-  -- rev may be a ref name (e.g. "origin/main") -- sanitize like safe_branch
-  -- below, or a "/" survives into the filename and splits it into
-  -- non-existent nested directories (DuckDB then fails to open it).
-  return (shortened:gsub("[^%w%-_]", "_"))
+  local base
+  if is_tip and stripped == "HEAD" then
+    base = head_key()
+  elseif stripped:match("^HEAD") or stripped:match("^%x+$") then
+    -- All-hex names may be abbreviated SHAs or digit-only tags; let git decide.
+    -- Unresolvable hex of SHA length is shortened as before.
+    base = rev_parse_short(stripped) or (stripped:match("^%x+$") and #stripped >= 7 and stripped:sub(1, 8)) or stripped
+  else
+    base = stripped
+  end
+  -- A ref name like "origin/main" must not leak its "/" into the filename, or
+  -- DuckDB fails to open the resulting non-existent nested directory.
+  return (base:gsub("[^%w%-_]", "_"))
+end
+
+function M.set_revisions(rev1, rev2)
+  current_revisions = (rev1 and rev2) and { key1 = rev_key(rev1, false), key2 = rev_key(rev2, true) } or nil
 end
 
 ---@return table
@@ -96,8 +116,8 @@ function M.current_session()
 
   if current_revisions then
     session.scope = "revision_range"
-    session.rev1 = short_rev(current_revisions.rev1)
-    session.rev2 = short_rev(current_revisions.rev2)
+    session.rev1 = current_revisions.key1
+    session.rev2 = current_revisions.key2
   else
     session.scope = "branch"
     session.branch_name = get_git_branch()
@@ -139,9 +159,7 @@ function M.get_storage_path()
   pcall(vim.fn.mkdir, data_dir, "p")
 
   if current_revisions then
-    local r1 = short_rev(current_revisions.rev1)
-    local r2 = short_rev(current_revisions.rev2)
-    return string.format("%s/%s-%s_%s.duckdb", data_dir, project_hash, r1, r2)
+    return string.format("%s/%s-%s_%s.duckdb", data_dir, project_hash, current_revisions.key1, current_revisions.key2)
   end
 
   local branch = get_git_branch()

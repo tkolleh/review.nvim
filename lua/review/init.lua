@@ -171,7 +171,18 @@ end
 ---@param rev2 string
 ---@return review.MergeBaseResult
 function M.resolve_merge_base(rev1, rev2)
-  local done = vim.system({ "git", "merge-base", rev1, rev2 }, { text = true, timeout = 5000 }):wait()
+  -- A leading "-" would be parsed as a git option (--all, --is-ancestor, ...).
+  for _, rev in ipairs({ rev1, rev2 }) do
+    if rev:sub(1, 1) == "-" then
+      return { ok = false, err = "invalid revision: " .. rev }
+    end
+  end
+  local ran, done = pcall(function()
+    return vim.system({ "git", "merge-base", rev1, rev2 }, { text = true, timeout = 5000 }):wait()
+  end)
+  if not ran then
+    return { ok = false, err = "could not run git: " .. tostring(done) }
+  end
   local sha = vim.trim(done.stdout or "")
   if done.code == 0 and sha ~= "" then
     return { ok = true, sha = sha }

@@ -56,6 +56,16 @@ describe("review merge-base", function()
       assert.truthy(result.err:match("no common ancestor between main and unrelated"))
     end)
 
+    it("rejects a revision git would parse as an option", function()
+      commit(repo, "root")
+
+      for _, args in ipairs({ { "--all", "main" }, { "main", "--is-ancestor" } }) do
+        local result = review.resolve_merge_base(args[1], args[2])
+        assert.is_false(result.ok)
+        assert.truthy(result.err:match("invalid revision"))
+      end
+    end)
+
     it("surfaces git's error for an unknown ref", function()
       commit(repo, "root")
 
@@ -107,6 +117,40 @@ describe("review merge-base", function()
       review.open_merge_base("origin/main")
 
       assert.are.same({ "origin/main", "HEAD" }, seen)
+    end)
+
+    it("opens codediff on the merge-base SHA and scopes storage to it", function()
+      review.resolve_merge_base = orig_resolve
+      local storage = require("review.storage")
+      local fork = commit(repo, "fork")
+      git(repo, "checkout", "-q", "-b", "topic")
+      commit(repo, "mine")
+      git(repo, "checkout", "-q", "main")
+      commit(repo, "theirs")
+      git(repo, "checkout", "-q", "topic")
+
+      package.preload["codediff"] = function() return {} end
+      local issued = {}
+      local orig_cmd = vim.cmd
+      vim.cmd = function(c)
+        if type(c) == "string" and c:match("^CodeDiff") then
+          table.insert(issued, c)
+          return
+        end
+        return orig_cmd(c)
+      end
+
+      review.open_merge_base("main")
+      vim.wait(5000, function() return #issued > 0 end, 50)
+
+      vim.cmd = orig_cmd
+      package.preload["codediff"] = nil
+      package.loaded["codediff"] = nil
+      local path = storage.get_storage_path()
+      storage.clear_revisions()
+
+      assert.are.same({ "CodeDiff " .. fork .. " HEAD" }, issued)
+      assert.truthy(path:match("%-" .. fork:sub(1, 8) .. "_topic%.duckdb$"))
     end)
 
     it("notifies an error and opens nothing when resolution fails", function()

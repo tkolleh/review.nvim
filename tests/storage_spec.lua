@@ -59,13 +59,6 @@ describe("review.storage", function()
       assert.are_not.equal(main_path, master_path)
     end)
 
-    it("does not key on the literal HEAD, which names a different commit per branch", function()
-      storage.set_revisions("abc12345", "HEAD")
-      local path = storage.get_storage_path()
-      assert.truthy(path:match("abc12345_[%w%-_]+%.duckdb$"))
-      assert.is_nil(path:match("_HEAD%.duckdb$"))
-    end)
-
     it("returns branch path after clearing revisions", function()
       storage.set_revisions("abc12345^", "def67890")
       storage.clear_revisions()
