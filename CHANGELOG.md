@@ -1,5 +1,101 @@
 # Changelog
 
+## [6.0.0](https://github.com/tkolleh/review.nvim/compare/v5.0.0...v6.0.0) (2026-11-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **keymaps:** `codediff.readonly` config option removed — diff buffers are now always locked. Keymap config keys removed: `toggle_readonly`, `add_note`, `add_suggestion`, `add_issue`, `add_praise`, `readonly_add`, `readonly_delete`, `readonly_edit`, `readonly_add_file`, `next_file`, `prev_file`, `toggle_file_panel`. `:Review toggle` subcommand removed. Edit-mode's two-letter keymaps are renamed to single letters: `add_comment` (was `<localleader>cc`) is now `<localleader>c`, `add_file_comment` (was `<localleader>cf`) is now `<localleader>f`, `edit_comment` (was `<localleader>ce`) is now `<localleader>e`, `delete_comment` (was `<localleader>cd`) is now `<localleader>d`. File navigation and the panel toggle are now codediff.nvim's own `]f`/`[f` and `<leader>b` instead of review's `<Tab>`/`<S-Tab>`/`f`.
+* this project is now maintained as an independent hard fork of georgeguimaraes/review.nvim. Not a plugin-API break -- this footer exists to mark v2.0.0 as the project's fork epoch via release-please's normal major-version-bump mechanism.
+
+### Features
+
+* add :Review merge-base subcommand ([7b328c1](https://github.com/tkolleh/review.nvim/commit/7b328c1a4780eb414190add4d74027d45d5ce77e))
+* add :Review merge-base subcommand ([46209f4](https://github.com/tkolleh/review.nvim/commit/46209f49534c33f0f4f99963e1a2aaf5d38b2d90))
+* add &lt;localleader&gt;cc to add comment with type picker in edit mode ([f788b03](https://github.com/tkolleh/review.nvim/commit/f788b03e8b954332a3af32fa13420b7fe2fdaf05))
+* add commit picker and auto-jump to first hunk ([d828f63](https://github.com/tkolleh/review.nvim/commit/d828f63c5ca2d50f8adaebfb33015cfb25fd0708))
+* add configurable file panel toggle keymap ([6cd2567](https://github.com/tkolleh/review.nvim/commit/6cd2567ca5ac07b67366075b33dc83699690b772))
+* add sidekick.nvim integration ([1c183ee](https://github.com/tkolleh/review.nvim/commit/1c183eef5a1ee55f086806e2f7131de480d6c28f))
+* allow open_commits to accept rev arguments directly ([#16](https://github.com/tkolleh/review.nvim/issues/16)) ([97180f8](https://github.com/tkolleh/review.nvim/commit/97180f86548253a6990bbeda3056e02df1d7e85d))
+* auto-export comments to clipboard on close ([2584566](https://github.com/tkolleh/review.nvim/commit/258456653c8d4617f88e46222c03a54d96e113b1))
+* auto-switch to unified view on open ([d1a6a42](https://github.com/tkolleh/review.nvim/commit/d1a6a426bd6976cb7bec57ac1ced991cdec61af4))
+* change keymaps - C for export, C-r for clear ([29f9f8b](https://github.com/tkolleh/review.nvim/commit/29f9f8b78cd80efe4e5ac93979e859720174b69e))
+* Comment side awareness, help popup, and picker improvements ([#20](https://github.com/tkolleh/review.nvim/issues/20)) ([fb70ca5](https://github.com/tkolleh/review.nvim/commit/fb70ca5db078d95fadf87dcb52a6326c299d8a05))
+* improve edit mode and make all keymaps configurable ([#14](https://github.com/tkolleh/review.nvim/issues/14)) ([e86a26d](https://github.com/tkolleh/review.nvim/commit/e86a26db7f14f6207ad36c491d5010a28f966808))
+* improve UX with focus management and export preview ([cfa3561](https://github.com/tkolleh/review.nvim/commit/cfa35612d2add9799dab716cf1accdd092c8aac6))
+* Include agent help ([44a60f6](https://github.com/tkolleh/review.nvim/commit/44a60f66815462aa01bcaa4779aa73dedb4b98ea))
+* Include agent skill ([5b218c8](https://github.com/tkolleh/review.nvim/commit/5b218c8a5c47a2e2c83bac298f5c21eb88af9803))
+* initial implementation of diffnotes.nvim ([2939401](https://github.com/tkolleh/review.nvim/commit/2939401e054d148557e280b282ac3680fa7401ac))
+* **keymaps:** lock diff buffers unconditionally and collapse to single-letter comment keymaps ([198cf66](https://github.com/tkolleh/review.nvim/commit/198cf66f2c1c7e8d8e51d2261a2bf94ad737ba29))
+* **marks:** color comment box borders per author ([8d728b0](https://github.com/tkolleh/review.nvim/commit/8d728b04580f65d676e1789d027d861196ba76ee))
+* migrate comment storage to DuckDB CLI backend ([5f48244](https://github.com/tkolleh/review.nvim/commit/5f4824402b0c6176ea3bf64213bf5538457101e7))
+* multi-line comments with box-style virtual text ([693b9f2](https://github.com/tkolleh/review.nvim/commit/693b9f25c7ba7ab53c6bb4f62e26fcc5eea42ac7))
+* persist comments per branch ([4433a78](https://github.com/tkolleh/review.nvim/commit/4433a78b6d77ae7dd080d2e8a7006e36be5adc14))
+* Reduce polling time ([9192498](https://github.com/tkolleh/review.nvim/commit/9192498421a9749dba047588ccfafd876b9b0538))
+* **review-nvim-skill:** add revision-range scope to main.py ([857f940](https://github.com/tkolleh/review.nvim/commit/857f940a109779563c3e6828ab584e6939997f70))
+* scope storage to revision range, enforce contiguous commit selection ([378b0ea](https://github.com/tkolleh/review.nvim/commit/378b0ea90bcd3f2d39da6e8bf8a18cfe78bfc774))
+* support single commit review with :Review commits SHA ([abe44ca](https://github.com/tkolleh/review.nvim/commit/abe44ca1e7b3e893d5e708e9a56cb0158c8b4333))
+
+
+### Bug Fixes
+
+* bind picker reset to r instead of n, update help text ([d7d96a5](https://github.com/tkolleh/review.nvim/commit/d7d96a50d789f836f5a3f12b6c49213bc3b17c9f))
+* **comments:** scope file-comment lookups to the acting author ([e28b167](https://github.com/tkolleh/review.nvim/commit/e28b16764eaebf731e73d4584edad64aeb63f725))
+* don't steal focus from floating windows during session init ([400dffe](https://github.com/tkolleh/review.nvim/commit/400dffe09ddeda450959544fcb3d60d1834c5577)), closes [#29](https://github.com/tkolleh/review.nvim/issues/29)
+* **duckdb:** decode JSON null as nil instead of vim.NIL sentinel ([f7374ff](https://github.com/tkolleh/review.nvim/commit/f7374ff73d189a0032a1a7428c8579a1002d01f8))
+* enable syntax highlighting when reviewing commits ([#11](https://github.com/tkolleh/review.nvim/issues/11)) ([d50dc2f](https://github.com/tkolleh/review.nvim/commit/d50dc2f307d93cfc8672d5ee8aa27487f1b82bd7))
+* export preview buffer handling and focus restoration ([b48249a](https://github.com/tkolleh/review.nvim/commit/b48249a51dff5bf14726979401b2ff1e32bcd951))
+* focus picker window on open ([507b111](https://github.com/tkolleh/review.nvim/commit/507b11119e4285061d918d5c36c0ddce9c2111c9))
+* hide block cursor in commit picker ([fedd052](https://github.com/tkolleh/review.nvim/commit/fedd05280753c4ba200e6dab799743b000e3881d))
+* **hooks:** restore buffer editability when a review session closes ([4946ed2](https://github.com/tkolleh/review.nvim/commit/4946ed23efa887c1b5e3e5bc956ed58a63b5cb60))
+* **init:** call store.sync_from_storage instead of removed store.load ([3522e08](https://github.com/tkolleh/review.nvim/commit/3522e083b2afa9ecf9afae4a936ac903a4518589))
+* **init:** don't crash closing a review when no session is active ([a343bb8](https://github.com/tkolleh/review.nvim/commit/a343bb8602e04c0c396bd0d92e22fa81725dea67))
+* issue keymaps not cleared on close ([#5](https://github.com/tkolleh/review.nvim/issues/5)) ([98a1986](https://github.com/tkolleh/review.nvim/commit/98a19868c389c03e007c8cbcb2e31d01fc020a6f))
+* key revision-range storage on branch for HEAD and keep ref names whole ([49209ca](https://github.com/tkolleh/review.nvim/commit/49209ca16d4d24da8e2c88ff5409c9be83cbe74b))
+* lock cursor to checkbox column in picker, drop guicursor hack ([9339d67](https://github.com/tkolleh/review.nvim/commit/9339d67a179d5c37243e04e7023c7c74c652ede4))
+* mark release PR as tagged after release creation ([b2a17b0](https://github.com/tkolleh/review.nvim/commit/b2a17b03d888d9b2c4dcdba6c05f944eea748ff1))
+* **marks:** wrap comment box text instead of growing width unbounded ([fca93ae](https://github.com/tkolleh/review.nvim/commit/fca93ae502d4f037e4cf6a339d36177fa410c655))
+* pass file paths directly to render_for_buffer, focus right pane on tab enter ([a1759c2](https://github.com/tkolleh/review.nvim/commit/a1759c26bcc9b6285f1772d7dcbe57c38095b197))
+* picker help text says select range ([6030157](https://github.com/tkolleh/review.nvim/commit/6030157afd4040516d9f59d79f1d4f5e6fbb7333))
+* picker keymaps and remove select all option ([23c850b](https://github.com/tkolleh/review.nvim/commit/23c850b362e88910ab47ee02173db684de530340))
+* pin HEAD-relative revisions and harden merge-base input ([bf5fbe4](https://github.com/tkolleh/review.nvim/commit/bf5fbe44d70ab33a7ca7e8aaae2a552307fb52cb))
+* **popup:** exit insert mode after submit, add configurable keymaps ([#17](https://github.com/tkolleh/review.nvim/issues/17)) ([004ae79](https://github.com/tkolleh/review.nvim/commit/004ae79ede88ce8655a777c87fb8d200c86b7bf6))
+* prevent FileType autocmd conflicts with plugins like render-markdown.nvim ([d740703](https://github.com/tkolleh/review.nvim/commit/d740703c8f7c76d5a7e757094d915a2c39a558a8))
+* prevent FileType autocmd conflicts with plugins like render-markdown.nvim ([211cc2f](https://github.com/tkolleh/review.nvim/commit/211cc2f45af84ba2621b9b12cbf4e172b3bb50e6))
+* prevent focus stealing on file select and keymaps on explorer buffer ([1190b0c](https://github.com/tkolleh/review.nvim/commit/1190b0c8c7908db05a891c08cda2b1bc317f5079))
+* prevent focus stealing on file select and keymaps on explorer buffer ([63f2502](https://github.com/tkolleh/review.nvim/commit/63f25027d038b7e54e53f0d17d781bd0d7bc71f3))
+* re-setup hooks after codediff layout toggle ([4de4962](https://github.com/tkolleh/review.nvim/commit/4de4962ff6fedad5a94562fe2b00100db38c1933))
+* relativize paths against git root, align comment boxes across panes ([d71a621](https://github.com/tkolleh/review.nvim/commit/d71a621c17e215707767db1c3c65e90e9af8cf09))
+* remove full-line Visual highlight from picker range selection ([eebdf35](https://github.com/tkolleh/review.nvim/commit/eebdf35c73a3ceae2258b9401489958974f927a2))
+* remove invalid diff1_plain layout config ([7ef7d72](https://github.com/tkolleh/review.nvim/commit/7ef7d72591dc2ab73dd71bf449d15f5a5bbcf5a4))
+* **storage:** sanitize ref-name revisions in short_rev ([10557cc](https://github.com/tkolleh/review.nvim/commit/10557cc941d9d26dbfca898c457e2951c84fe4fd))
+* **storage:** soft-delete comments instead of destroying the review database on &lt;C-r&gt; ([364b53d](https://github.com/tkolleh/review.nvim/commit/364b53dccc4d2cac316c5264e9f73fdc7b0e88ef))
+* support codediff &gt;= 2.50.0 typed Path return from get_paths ([5c4ce85](https://github.com/tkolleh/review.nvim/commit/5c4ce85c0489d48d21c3b3f91f2723d2e48482b7))
+* support codediff &gt;= 2.50.0 typed Path return from get_paths ([50a8b54](https://github.com/tkolleh/review.nvim/commit/50a8b549be1cc4b0197b02d9684b9c5724629080))
+* toggle layout for current entry explicitly ([001668d](https://github.com/tkolleh/review.nvim/commit/001668d3da5217a91296015dad64a9af47fa26f9))
+* use cursorlineopt=line to avoid block cursor in picker ([3a02930](https://github.com/tkolleh/review.nvim/commit/3a02930909c677262f01474917bd3f89e9c04d7a))
+* use localleader instead of leader for buffer-local edit mode keymaps ([19440b5](https://github.com/tkolleh/review.nvim/commit/19440b57634a5e512334f9581f6c15a85bf0ff1d))
+* use raw origin path ([a544284](https://github.com/tkolleh/review.nvim/commit/a544284c56bb695a7300f6c7710290d00c5d7497))
+
+
+### Documentation
+
+* declare hard fork from georgeguimaraes/review.nvim ([01640b1](https://github.com/tkolleh/review.nvim/commit/01640b1a8cee575edcc6abdd89cb2aaa820ea90d))
+
+
+### Code Refactoring
+
+* **comments:** tighten inline comments to why-not-what standard ([5a31c92](https://github.com/tkolleh/review.nvim/commit/5a31c920bda03d033cbca8811f1fa9d83b92138c))
+* extract shared normalize_path, clean up review issues ([864904e](https://github.com/tkolleh/review.nvim/commit/864904e8df1cd772a6b770b916d47ecbf6f697ea))
+* migrate from diffview.nvim to codediff.nvim ([416c10d](https://github.com/tkolleh/review.nvim/commit/416c10db6bc6f6ca5b2331cb0cd7f3a330df416a))
+* rename plugin from diffnotes to review ([07f7dfd](https://github.com/tkolleh/review.nvim/commit/07f7dfd7868d4b1d726f8f6b4c73b4ec0afd2d9d))
+* use title-based notifications ([1a3b3a5](https://github.com/tkolleh/review.nvim/commit/1a3b3a5d3006daab0a37c19e94e0ef479d5ce636))
+
+
+### Performance Improvements
+
+* only update changed line on selection toggle ([c2f7285](https://github.com/tkolleh/review.nvim/commit/c2f7285d8b2ed3847e9ff8c82244be2267be2654))
+
 ## [5.0.0](https://github.com/tkolleh/review.nvim/compare/v4.3.0...v5.0.0) (2026-11-14)
 
 
